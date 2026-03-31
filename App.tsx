@@ -164,7 +164,6 @@ export default function App() {
     const data = await res.json();
     if (!res.ok) return setMessage(data.message || 'Login failed');
     setUser(data.user);
-    loadState(selectedPharmacy);
     setMessage('Logged in');
   }
 
@@ -181,7 +180,6 @@ export default function App() {
     setSetupForm({ username: '', password: '', displayName: '' });
     setMessage('Initial admin account created');
     setBootstrap((prev) => prev ? ({ ...prev, auth: { hasUsers: true, requiresSetup: false } }) : prev);
-    loadState(selectedPharmacy);
   }
 
   async function handleUpload(e: React.FormEvent) {
