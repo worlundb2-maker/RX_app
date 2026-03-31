@@ -431,11 +431,17 @@ th {
   background: linear-gradient(180deg, #f8fafc, #f1f5f9);
   z-index: 1;
 }
-tbody tr:nth-child(even):not(.detail-row) {
-  background: #fcfdff;
+.report-table-claims th,
+.report-table-claims td {
+  white-space: normal;
+  line-height: 1.35;
 }
-tbody tr:hover:not(.detail-row) {
-  background: #f5f9ff;
+.report-table-claims td[data-priority="primary"] {
+  font-weight: 600;
+}
+.report-table-claims td[data-priority="optional"],
+.report-table-claims th[data-priority="optional"] {
+  display: none;
 }
 .sort-button {
   border: none;
@@ -509,6 +515,12 @@ tbody tr:hover:not(.detail-row) {
   .executive-kpi-grid,
   .overview-metrics { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 }
+@media (max-width: 1280px) {
+  .report-table-claims td[data-priority="secondary"],
+  .report-table-claims th[data-priority="secondary"] {
+    display: none;
+  }
+}
 
 .tabs.card {
   padding: 10px;
@@ -534,6 +546,11 @@ tbody tr:hover:not(.detail-row) {
 .clickable-card:hover,
 .clickable-metric:hover {
   transform: translateY(-1px);
+}
+
+.pharmacy-performance-card.clickable-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--pharmacyColor) 45%, #1d4ed8);
+  outline-offset: 2px;
 }
 
 .clickable-metric {

@@ -10,3 +10,6 @@ ingest_inbox/
 # Prevent server TS/JS drift by blocking committed transpiled JS artifacts
 server/*.js
 server/*.js.map
+
+# Desktop packaging output
+release/

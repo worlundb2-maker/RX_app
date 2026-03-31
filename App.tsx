@@ -48,6 +48,7 @@ type ColumnDef = {
   type?: 'text' | 'number' | 'currency' | 'percent';
   width?: string;
   render?: (row: any) => any;
+  compactPriority?: 'primary' | 'secondary' | 'optional';
 };
 
 type OverviewMetric = {
@@ -320,17 +321,17 @@ export default function App() {
   ];
 
   const claimsColumns: ColumnDef[] = [
-    { key: 'pharmacyName', label: 'Pharmacy' },
-    { key: 'ndc', label: 'NDC' },
-    { key: 'drugName', label: 'Drug' },
-    { key: 'inventoryGroup', label: 'Group' },
-    { key: 'totalClaims', label: 'Claims', type: 'number' },
-    { key: 'medDClaims', label: 'Med D', type: 'number' },
-    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency' },
-    { key: 'estimatedAcquisition', label: 'Estimated Acquisition', type: 'currency' },
-    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency' },
-    { key: 'opportunity', label: 'Opportunity' },
-    { key: 'severity', label: 'Severity' },
+    { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional' },
+    { key: 'ndc', label: 'NDC', compactPriority: 'secondary' },
+    { key: 'drugName', label: 'Drug', compactPriority: 'primary' },
+    { key: 'inventoryGroup', label: 'Group', compactPriority: 'secondary' },
+    { key: 'totalClaims', label: 'Claims', type: 'number', compactPriority: 'primary' },
+    { key: 'medDClaims', label: 'Med D', type: 'number', compactPriority: 'optional' },
+    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency', compactPriority: 'optional' },
+    { key: 'estimatedAcquisition', label: 'Est Acquisition', type: 'currency', compactPriority: 'optional' },
+    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency', compactPriority: 'primary' },
+    { key: 'opportunity', label: 'Opportunity', compactPriority: 'primary' },
+    { key: 'severity', label: 'Severity', compactPriority: 'primary' },
   ];
 
   const thirdPartyColumns: ColumnDef[] = [
@@ -520,7 +521,14 @@ export default function App() {
 
             <div className="grid pharmacy-card-grid" style={{ marginTop: 18 }}>
               {filteredFinanceByPharmacy.map((item: any) => (
-                <PharmacyFinanceCard key={item.pharmacyCode} item={item} staffing={state.staffing?.byPharmacy?.find((site: any) => site.pharmacyCode === item.pharmacyCode)} onClickSdra={() => openReport('SDRA', { flaggedOnly: true, filterText: item.pharmacyName })} onClickStaffing={() => openReport('Staffing', { filterText: item.pharmacyName, flaggedOnly: true })} />
+                <PharmacyFinanceCard
+                  key={item.pharmacyCode}
+                  item={item}
+                  staffing={state.staffing?.byPharmacy?.find((site: any) => site.pharmacyCode === item.pharmacyCode)}
+                  onClickDrilldown={() => openReport('Claims', { filterText: item.pharmacyName })}
+                  onClickSdra={() => openReport('SDRA', { flaggedOnly: true, filterText: item.pharmacyName })}
+                  onClickStaffing={() => openReport('Staffing', { filterText: item.pharmacyName, flaggedOnly: true })}
+                />
               ))}
             </div>
 
@@ -705,7 +713,7 @@ export default function App() {
                 { label: 'Brand cash', onClick: () => setReportContext({ section: 'Claims', filterText: 'Recurring brand cash claims', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="Claims analysis" description="Opportunities are grouped by pharmacy + NDC + inventory group and always drill to the exact claim rows driving the signal." rows={state.claimsAnalysis} columns={claimsColumns} exportName="claims_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Claims analysis" description="Opportunities are grouped by pharmacy + NDC + inventory group and always drill to the exact claim rows driving the signal." rows={state.claimsAnalysis} columns={claimsColumns} exportName="claims_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} tableVariant="claims" />
           </>
         )}
 
@@ -924,10 +932,28 @@ function ActionQueueCard({ title, value, hint, tone = 'neutral', onClick }: { ti
   );
 }
 
-function PharmacyFinanceCard({ item, staffing, onClickSdra, onClickStaffing }: { item:any; staffing:any; onClickSdra:()=>void; onClickStaffing:()=>void }) {
+function PharmacyFinanceCard({ item, staffing, onClickDrilldown, onClickSdra, onClickStaffing }: { item:any; staffing:any; onClickDrilldown:()=>void; onClickSdra:()=>void; onClickStaffing:()=>void }) {
   const color = item.pharmacyColor || pharmacyColorMap[item.pharmacyCode] || '#132238';
+  const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldSkipCardDrilldown(event.target)) return;
+    onClickDrilldown();
+  };
+
   return (
-    <div className="card pharmacy-performance-card" style={{ ['--pharmacyColor' as any]: color }}>
+    <div
+      className="card pharmacy-performance-card clickable-card"
+      style={{ ['--pharmacyColor' as any]: color }}
+      onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClickDrilldown();
+        }
+      }}
+      aria-label={`Open ${item.pharmacyName} claims drilldown`}
+    >
       <div className="pharmacy-performance-head">
         <div>
           <div className="eyebrow">{item.pharmacyName}</div>
@@ -944,12 +970,18 @@ function PharmacyFinanceCard({ item, staffing, onClickSdra, onClickStaffing }: {
         <MetricStack label="Weighted NDC" value={item.weightedNdcSavings || 0} type="currency" />
       </div>
       <div className="small muted" style={{ marginTop: 12 }}>{staffing?.dashboardNote || `${item.flaggedActions || 0} flagged actions are currently attached to this pharmacy.`}</div>
+      <div className="small muted" style={{ marginTop: 6 }}>Click anywhere on this card to open claim-level drilldown for {item.pharmacyName}.</div>
       <div className="row" style={{ marginTop: 14 }}>
         <button className="secondary" onClick={onClickSdra}>Open SDRA issues</button>
         <button className="secondary" onClick={onClickStaffing}>Open staffing</button>
       </div>
     </div>
   );
+}
+
+function shouldSkipCardDrilldown(target: EventTarget | null) {
+  const element = target instanceof HTMLElement ? target : null;
+  return Boolean(element?.closest('button, a, input, select, textarea, [role="button"], [data-no-card-drilldown="true"]'));
 }
 
 function MetricStack({ label, value, type }: { label:string; value:any; type?:ColumnDef['type'] }) {
@@ -1086,6 +1118,7 @@ function ReportTable({
   externalFilterText,
   externalFlaggedOnly,
   onApplyLabel,
+  tableVariant = 'default',
 }: {
   title: string;
   description?: string;
@@ -1099,6 +1132,7 @@ function ReportTable({
   externalFilterText?: string;
   externalFlaggedOnly?: boolean;
   onApplyLabel?: (targetKey: string, label: 'flag' | 'do_not_flag' | 'resolved' | null) => Promise<void> | void;
+  tableVariant?: 'default' | 'claims';
 }) {
   const [sortKey, setSortKey] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -1231,14 +1265,14 @@ function ReportTable({
             </div>
           )}
           {groupOpen && (
-          <div className="table-wrap">
+          <div className={`table-wrap ${tableVariant === 'claims' ? 'report-table-claims' : ''}`}>
             <table>
               <thead>
                 <tr>
                   {allowDrilldown && <th style={{ width: 58 }}>Detail</th>}
                   {showLabelColumn && <th style={{ width: 168 }}>Action taken</th>}
                   {columns.map((column) => (
-                    <th key={column.key} style={{ width: column.width }}>
+                    <th key={column.key} style={{ width: column.width }} data-priority={column.compactPriority || 'primary'}>
                       <button className="sort-button" onClick={() => {
                         if (sortKey === column.key) setSortDir((dir) => dir === 'asc' ? 'desc' : 'asc');
                         else { setSortKey(column.key); setSortDir('asc'); }
@@ -1285,7 +1319,7 @@ function ReportTable({
                           </td>
                         )}
                         {columns.map((column) => (
-                          <td key={`${rowId}-${column.key}`}>
+                          <td key={`${rowId}-${column.key}`} data-priority={column.compactPriority || 'primary'}>
                             <Cell value={cellValue(row, column)} type={column.type} />
                           </td>
                         ))}
