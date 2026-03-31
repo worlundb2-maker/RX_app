@@ -2,8 +2,8 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import syncFs from 'node:fs';
 import path from 'node:path';
-import { createServer as createViteServer } from 'vite';
 import { registerRoutes } from './routes';
+import { getAppRootDir } from './paths';
 
 const app = express();
 app.use((_req, res, next) => {
@@ -18,15 +18,16 @@ registerRoutes(app);
 const wantsProduction = process.argv.includes('--production') || process.env.NODE_ENV === 'production';
 
 async function mountVite() {
+  const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({
-    configFile: path.resolve(process.cwd(), 'vite.config.ts'),
+    configFile: path.resolve(getAppRootDir(), 'vite.config.ts'),
     server: { middlewareMode: true },
     appType: 'custom'
   });
   app.use(vite.middlewares);
   app.use(async (req, res, next) => {
     try {
-      const file = await fs.readFile(path.resolve(process.cwd(), 'index.html'), 'utf8');
+      const file = await fs.readFile(path.resolve(getAppRootDir(), 'index.html'), 'utf8');
       const html = await vite.transformIndexHtml(req.originalUrl, file);
       res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
     } catch (error) {
@@ -36,13 +37,13 @@ async function mountVite() {
 }
 
 async function mountDist() {
-  const dist = path.resolve(process.cwd(), 'dist', 'public');
+  const dist = path.resolve(getAppRootDir(), 'dist', 'public');
   app.use(express.static(dist));
   app.use((_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
 async function start() {
-  const dist = path.resolve(process.cwd(), 'dist', 'public', 'index.html');
+  const dist = path.resolve(getAppRootDir(), 'dist', 'public', 'index.html');
   const useDist = wantsProduction && process.env.USE_DIST === '1' && syncFs.existsSync(dist);
 
   if (useDist) {

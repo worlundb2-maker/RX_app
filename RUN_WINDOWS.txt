@@ -24,6 +24,7 @@ set "PATH=%CD%\node-v24.14.0-win-x64;%PATH%"
 5. Open http://127.0.0.1:5000 in the browser.
 
 Notes
-- This package does not require npm install.
-- The app now serves the current source directly, so it does not depend on a rebuilt dist folder.
-- If the launcher fails, launcher.log and launcher-server.log should be created.
+- No Command Prompt steps are required for normal use.
+- No npm install is required for end users.
+- The app stays local-only (127.0.0.1 loopback).
+- Data persists in `%APPDATA%\Pharmacy Analytics\local-data`.

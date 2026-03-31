@@ -24,6 +24,12 @@ body {
 button, input, select { font: inherit; }
 button { transition: 0.18s ease; }
 button:hover { transform: translateY(-1px); }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 
 .app-shell {
   position: relative;
@@ -41,7 +47,7 @@ button:hover { transform: translateY(-1px); }
   position: relative;
   max-width: 1550px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 28px 24px 34px;
 }
 
 .loading-state {
@@ -52,7 +58,7 @@ button:hover { transform: translateY(-1px); }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   box-shadow: var(--shadow-soft);
 }
@@ -68,6 +74,9 @@ button:hover { transform: translateY(-1px); }
   align-items: flex-start;
   gap: 20px;
   margin-bottom: 16px;
+  position: sticky;
+  top: 10px;
+  z-index: 15;
 }
 
 h1, h2, h3 { margin: 0; line-height: 1.15; }
@@ -101,6 +110,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
 }
 .tab {
   border: 1px solid var(--border);
@@ -113,6 +123,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 }
 .tab.active {
   box-shadow: inset 0 0 0 1px currentColor;
+  font-weight: 700;
 }
 
 .message-banner {
@@ -196,6 +207,9 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
   cursor: pointer;
   box-shadow: var(--shadow-soft);
 }
+.action-card:hover {
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.09);
+}
 .action-card.tone-good { border-color: rgba(22, 163, 74, 0.22); }
 .action-card.tone-warn { border-color: rgba(245, 158, 11, 0.28); }
 .action-card.tone-bad { border-color: rgba(220, 38, 38, 0.28); }
@@ -246,7 +260,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 }
 .overview-metric {
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 14px 14px 12px;
   background: linear-gradient(180deg, #111b2d, #0f1726);
 }
@@ -315,6 +329,7 @@ button.primary {
   color: white;
   padding: 10px 14px;
   cursor: pointer;
+  box-shadow: 0 10px 20px rgba(19, 34, 56, 0.18);
 }
 button.secondary {
   background: #0f1726;
@@ -413,6 +428,18 @@ th {
   background: #121d30;
   z-index: 1;
 }
+.report-table-claims th,
+.report-table-claims td {
+  white-space: normal;
+  line-height: 1.35;
+}
+.report-table-claims td[data-priority="primary"] {
+  font-weight: 600;
+}
+.report-table-claims td[data-priority="optional"],
+.report-table-claims th[data-priority="optional"] {
+  display: none;
+}
 .sort-button {
   border: none;
   background: transparent;
@@ -485,6 +512,12 @@ th {
   .executive-kpi-grid,
   .overview-metrics { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 }
+@media (max-width: 1280px) {
+  .report-table-claims td[data-priority="secondary"],
+  .report-table-claims th[data-priority="secondary"] {
+    display: none;
+  }
+}
 
 .tabs.card {
   padding: 10px;
@@ -512,6 +545,11 @@ th {
   transform: translateY(-1px);
 }
 
+.pharmacy-performance-card.clickable-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--pharmacyColor) 45%, #1d4ed8);
+  outline-offset: 2px;
+}
+
 .clickable-metric {
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #111b2d, #0f1726);
@@ -529,7 +567,7 @@ th {
 .queue-table-wrap {
   margin-top: 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   overflow: auto;
 }
 

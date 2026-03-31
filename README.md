@@ -3,20 +3,19 @@
 This package is prepared for local Windows use.
 
 ## Open the app
-1. Extract the zip to a normal folder such as `C:\RX_Analytics`.
-2. Keep the `node-v24.14.0-win-x64` folder in the same folder as `Open Pharmacy Analytics.exe`.
-3. Double-click `Open Pharmacy Analytics.exe`.
-4. The app should open in the default browser at `http://127.0.0.1:5000`.
+1. Download `Pharmacy Analytics.exe` from the latest release package.
+2. Double-click `Pharmacy Analytics.exe`.
+3. The desktop window opens directly (no Command Prompt needed).
 
-## Important
-- This package does not need `npm install`.
-- This package already includes the local dependencies it needs.
-- If Windows blocks the EXE, open Properties and select **Unblock**, then open it again.
+## Local-only behavior
+- The app runs only on `127.0.0.1`.
+- All data stays on the local machine.
+- Uploaded files, persistence, drilldown, and manual clear behavior remain local.
+- No cloud services are required.
 
-## If it does not open
-The launcher will create:
-- `launcher.log`
-- `launcher-server.log`
+## Data location
+Runtime data is stored in the current Windows user profile under:
+- `%APPDATA%\Pharmacy Analytics\local-data`
 
 If startup fails, the launcher opens those logs automatically in Notepad.
 
