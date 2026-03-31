@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { randomUUID } from 'node:crypto';
 import { pharmacyByCode, readDb, resolvePharmacy, writeDb } from './data';
+import { normalizeClaimLifecycle } from './claimLifecycle';
 import type { InventoryGroup, InventoryRow, MtfClaim, PharmacyCode, PioneerClaim, PriceRow, UploadType } from './types';
 
 type RowObject = Record<string, any>;
@@ -233,19 +234,6 @@ function asDate(value: any): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
-function normalizeClaimLifecycle(claimTypeValue: any, currentStatusValue: any): 'active' | 'reversed' | 'cancelled' | 'rejected_on_hold' | 'transferred' | 'other_inactive' {
-  const claimType = asText(claimTypeValue).toUpperCase();
-  const currentStatus = asText(currentStatusValue).toLowerCase();
-
-  if (claimType === 'B2' || /reversal|reversed/.test(currentStatus)) return 'reversed';
-  if (/transfer|transferred/.test(currentStatus)) return 'transferred';
-  if (/cancel/.test(currentStatus) && !claimType) return 'rejected_on_hold';
-  if (/reject|on hold|hold/.test(currentStatus)) return 'rejected_on_hold';
-  if (/cancel/.test(currentStatus)) return 'cancelled';
-  if (claimType === 'B1' || /complete|completed|paid|sold|adjudicated/.test(currentStatus)) return 'active';
-  return currentStatus ? 'other_inactive' : 'active';
-}
-
 function pioneerClaimKey(claim: Pick<PioneerClaim, 'pharmacyCode' | 'rxNumber' | 'fillNumber' | 'ndc'>) {
   return [claim.pharmacyCode, claim.rxNumber, claim.fillNumber, cleanNdc(claim.ndc)].join('|');
 }
@@ -441,7 +429,7 @@ export function ingestUpload(filePath: string, type: UploadType, requestedPharma
         payerType: payerTypeFromNames(primaryPayer, thirdPartyName || '', primaryPlanType || '', secondaryPlanType || ''),
         claimStatus,
         currentTransactionStatus,
-        normalizedClaimLifecycle: normalizeClaimLifecycle(rawClaimStatus, currentTransactionStatus),
+        normalizedClaimLifecycle: normalizeClaimLifecycle({ claimStatus: rawClaimStatus, currentTransactionStatus }),
         totalPricePaid: asNumber(findValue(row, ['TotalPricePaid', 'Total Price Paid', 'Paid Amount', 'Gross Amount'])),
         primaryRemitAmount: asNumber(findValue(row, ['PrimaryRemit', 'PrimaryRemitAmount', 'Primary Remit', 'Primary Remit Amount', 'Remit Amount', 'Net Paid'])),
         secondaryRemitAmount: asNumber(findValue(row, ['SecondaryRemit', 'SecondaryRemitAmount', 'Secondary Remit', 'Secondary Remit Amount'])),
