@@ -11,5 +11,5 @@
     "baseUrl": ".",
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "client/src/**/*.ts", "client/src/**/*.tsx", "vite.config.ts"]
+  "include": ["server/**/*.ts", "*.ts", "*.tsx", "vite.config.ts"]
 }
