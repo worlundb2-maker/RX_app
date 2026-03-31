@@ -1035,6 +1035,90 @@ function normalizeForSearch(value: any) {
   return String(value ?? '').toLowerCase();
 }
 
+function splitFlagReasons(flagReason: any) {
+  return String(flagReason || '').split(';').map((part) => part.trim()).filter(Boolean);
+}
+
+function flagReasonKey(reason: string) {
+  return String(reason || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function explainFlagReason(reason: string) {
+  const key = flagReasonKey(reason);
+  const explanationMap: Record<string, string> = {
+    'manual flag': 'Manually marked for review by the team.',
+    'marked do not flag': 'Manually removed from the active review queue.',
+    'marked resolved': 'Manually marked resolved after follow-up.',
+    'rx not paid and should have been': 'Expected SDRA payment is missing and follow-up is needed.',
+    'rx not paid correctly': 'SDRA payment posted but does not align with expected value.',
+    '340b paid and should not have been': '340B claim appears to have an improper payment.',
+    'unexpected payment amount': 'Payment row amount is unexpected and needs validation.',
+    'no pioneer match': 'MTF payment row did not match a Pioneer claim.',
+    'material negative gross profit': 'Gross profit is materially negative for this grouped claim set.',
+    'recurring atypical day-supply pattern': 'Atypical quantity/day-supply pattern is recurring.',
+    'recurring brand cash claims': 'Brand cash pattern is recurring in this grouped claim set.',
+    'high payer concentration': 'Claims are concentrated in a narrow payer mix.',
+    'negative gross profit': 'Gross profit is negative for this payer grouping.',
+    'low gross profit': 'Gross profit is low for this payer grouping.',
+    'missing acquisition or remit data': 'Required remit/acquisition inputs are incomplete for analysis.',
+    'replenish 340b': '340B inventory is below target level.',
+    'reorder rx': 'RX inventory is at or below reorder threshold.',
+    'return candidate': 'Inventory appears return-eligible based on usage and value.',
+    'medicaid plan dispensed from 340b inventory': 'Medicaid claim was dispensed from 340B inventory.',
+    '340b inventory used without 340b-eligible prescriber': '340B inventory was used without eligible prescriber status.',
+    'rx inventory used for 340b-eligible prescriber': 'RX inventory was used for a potentially 340B-eligible claim.',
+    'medicaid should not dispense from 340b': 'Claim indicates Medicaid/340B combination requiring compliance review.',
+    'atypical quantity/day-supply ratio': 'Claim has an atypical quantity/day-supply ratio.',
+    'brand cash claim': 'Claim was processed as brand cash.',
+    'unexpected rx payment value': 'Unexpected SDRA RX payment value detected.',
+    'unexpected 340b payment value': 'Unexpected SDRA 340B payment value detected.',
+  };
+  if (/^\d+\s+sdra items require review$/.test(key)) return 'Multiple SDRA rows under this grouping require review.';
+  if (explanationMap[key]) return explanationMap[key];
+  return reason;
+}
+
+function operationalAction(reason: string) {
+  const key = flagReasonKey(reason);
+  const actionMap: Record<string, string> = {
+    'manual flag': 'Action: review this item in the current work queue.',
+    'marked do not flag': 'Action: no active follow-up unless business context changes.',
+    'marked resolved': 'Action: verify closure evidence is complete for audit trail.',
+    'rx not paid and should have been': 'Action: rebill/appeal and track collectible closure.',
+    'rx not paid correctly': 'Action: validate expected vs paid amount and post adjustment.',
+    '340b paid and should not have been': 'Action: validate eligibility and process correction workflow.',
+    'unexpected payment amount': 'Action: reconcile source rows and correct payment variance.',
+    'no pioneer match': 'Action: reconcile unmatched payment row to source claim data.',
+    'material negative gross profit': 'Action: review reimbursement and acquisition drivers at drilldown level.',
+    'recurring atypical day-supply pattern': 'Action: verify quantity, days supply, and SIG on flagged claims.',
+    'recurring brand cash claims': 'Action: review cash pricing and covered claim alternatives.',
+    'high payer concentration': 'Action: monitor payer dependency and escalation thresholds.',
+    'negative gross profit': 'Action: evaluate payer-level reimbursement and contracting response.',
+    'low gross profit': 'Action: monitor trend and prioritize if deterioration continues.',
+    'missing acquisition or remit data': 'Action: complete missing price/remit inputs before final decisioning.',
+    'replenish 340b': 'Action: execute 340B replenishment workflow for this item.',
+    'reorder rx': 'Action: place or transfer RX inventory to reorder target.',
+    'return candidate': 'Action: evaluate return eligibility and execute per policy.',
+    'medicaid plan dispensed from 340b inventory': 'Action: open compliance review and corrective workflow.',
+    '340b inventory used without 340b-eligible prescriber': 'Action: validate prescriber eligibility and correct inventory designation.',
+    'rx inventory used for 340b-eligible prescriber': 'Action: review eligibility and inventory assignment opportunity.',
+    'medicaid should not dispense from 340b': 'Action: verify eligibility and follow compliance correction process.',
+    'atypical quantity/day-supply ratio': 'Action: validate claim entry and dispensing pattern in drilldown rows.',
+    'brand cash claim': 'Action: validate cash claim appropriateness and alternatives.',
+    'unexpected rx payment value': 'Action: reconcile RX payment variance against expected SDRA logic.',
+    'unexpected 340b payment value': 'Action: reconcile 340B payment variance against expected SDRA logic.',
+  };
+  if (/^\d+\s+sdra items require review$/.test(key)) return 'Action: open grouped SDRA drilldown and clear each flagged row.';
+  return actionMap[key] || 'Action: review row-level drilldown and follow the current site workflow.';
+}
+
+function actionStateLabel(row: any) {
+  if (row.manualLabel === 'Resolved') return 'Resolved';
+  if (row.manualLabel === 'Do not flag') return 'Excluded';
+  if (row.manualLabel === 'Flag') return 'Needs review';
+  return row.flagged ? 'Needs review' : 'No action needed';
+}
+
 function compareValues(a: any, b: any) {
   if (a == null && b == null) return 0;
   if (a == null) return 1;
@@ -1134,9 +1218,14 @@ function ReportTable({
     return rows.filter((row) => {
       if (flaggedOnly && !row.flagged) return false;
       if (!text) return true;
+      const reasonExplanationText = splitFlagReasons(row.flagReason).map((reason) => explainFlagReason(reason)).join(' ');
+      const recommendedActions = splitFlagReasons(row.flagReason).map((reason) => operationalAction(reason)).join(' ');
       return columns.some((column) => normalizeForSearch(cellValue(row, column)).includes(text))
+        || normalizeForSearch(actionStateLabel(row)).includes(text)
         || normalizeForSearch(row.manualLabel).includes(text)
-        || normalizeForSearch(row.flagReason).includes(text);
+        || normalizeForSearch(row.flagReason).includes(text)
+        || normalizeForSearch(reasonExplanationText).includes(text)
+        || normalizeForSearch(recommendedActions).includes(text);
     });
   }, [rows, columns, filterText, flaggedOnly]);
 
@@ -1200,7 +1289,7 @@ function ReportTable({
         <div>
           <h2>{title}</h2>
           <div className="small muted">{description || 'Grouped by pharmacy, sortable, filterable, exportable, and expandable to row-level detail.'}</div>
-          {onApplyLabel && <div className="small muted" style={{ marginTop: 6 }}>Use the Action taken dropdown on each row for faster labeling, or right-click any row to label it as do not flag, flag, or resolved.</div>}
+          {onApplyLabel && <div className="small muted" style={{ marginTop: 6 }}>Use the Action state dropdown on each row for faster labeling, or right-click any row to set Needs review, Excluded, or Resolved.</div>}
         </div>
         <div className="report-actions">
           <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter this report" />
@@ -1236,7 +1325,7 @@ function ReportTable({
               <thead>
                 <tr>
                   {allowDrilldown && <th style={{ width: 58 }}>Detail</th>}
-                  {showLabelColumn && <th style={{ width: 168 }}>Action taken</th>}
+                  {showLabelColumn && <th style={{ width: 184 }}>Action state</th>}
                   {columns.map((column) => (
                     <th key={column.key} style={{ width: column.width }}>
                       <button className="sort-button" onClick={() => {
@@ -1276,12 +1365,12 @@ function ReportTable({
                                 value={row.manualLabel === 'Flag' ? 'flag' : row.manualLabel === 'Do not flag' ? 'do_not_flag' : row.manualLabel === 'Resolved' ? 'resolved' : ''}
                                 onChange={(event) => handleApplyLabel(row.id, (event.target.value || null) as 'flag' | 'do_not_flag' | 'resolved' | null)}
                               >
-                                <option value="">{pendingLabels[row.id] ? 'Saving…' : 'No action'}</option>
-                                <option value="flag">Flag</option>
-                                <option value="do_not_flag">Do not flag</option>
+                                <option value="">{pendingLabels[row.id] ? 'Saving…' : 'No manual override'}</option>
+                                <option value="flag">Needs review</option>
+                                <option value="do_not_flag">Excluded</option>
                                 <option value="resolved">Resolved</option>
                               </select>
-                            ) : row.manualLabel ? <span className="pill">{row.manualLabel}</span> : '—'}
+                            ) : <span className="pill">{actionStateLabel(row)}</span>}
                           </td>
                         )}
                         {columns.map((column) => (
@@ -1294,8 +1383,29 @@ function ReportTable({
                         <tr className="detail-row">
                           <td colSpan={columns.length + 1 + (showLabelColumn ? 1 : 0)}>
                             {renderDetails ? renderDetails(row) : <DetailTable details={row.details} />}
-                            {row.flagReason && <div className="small muted" style={{ marginTop: 10 }}>Flag reason: {row.flagReason}</div>}
-                            {row.manualLabel && <div className="small muted" style={{ marginTop: 6 }}>Manual label: {row.manualLabel}</div>}
+                            <div className="small muted" style={{ marginTop: 10 }}>Action state: {actionStateLabel(row)}</div>
+                            {row.manualLabel && <div className="small muted" style={{ marginTop: 6 }}>Manual override: {row.manualLabel}</div>}
+                            {row.flagReason && (
+                              <div className="small muted" style={{ marginTop: 6 }}>
+                                Flag explanation:
+                                <ul className="plain-list compact">
+                                  {splitFlagReasons(row.flagReason).map((reason, index) => (
+                                    <li key={`${rowId}-reason-${index}`}>{explainFlagReason(reason)}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {row.flagReason && (
+                              <div className="small muted" style={{ marginTop: 6 }}>
+                                Recommended actions:
+                                <ul className="plain-list compact">
+                                  {splitFlagReasons(row.flagReason)
+                                    .map((reason) => operationalAction(reason))
+                                    .filter(Boolean)
+                                    .map((action, index) => <li key={`${rowId}-action-${index}`}>{action}</li>)}
+                                </ul>
+                              </div>
+                            )}
                             {row.actionItems?.length ? <div className="small muted" style={{ marginTop: 6 }}>Action items: {row.actionItems.join(' · ')}</div> : null}
                           </td>
                         </tr>
@@ -1312,10 +1422,10 @@ function ReportTable({
 
       {menu && onApplyLabel && (
         <div className="context-menu" style={{ top: menu.y, left: menu.x }}>
-          <button onClick={async () => { await handleApplyLabel(menu.row.id, 'flag'); setMenu(null); }}>Flag</button>
-          <button onClick={async () => { await handleApplyLabel(menu.row.id, 'do_not_flag'); setMenu(null); }}>Do not flag</button>
+          <button onClick={async () => { await handleApplyLabel(menu.row.id, 'flag'); setMenu(null); }}>Needs review</button>
+          <button onClick={async () => { await handleApplyLabel(menu.row.id, 'do_not_flag'); setMenu(null); }}>Excluded</button>
           <button onClick={async () => { await handleApplyLabel(menu.row.id, 'resolved'); setMenu(null); }}>Resolved</button>
-          <button onClick={async () => { await handleApplyLabel(menu.row.id, null); setMenu(null); }}>Clear label</button>
+          <button onClick={async () => { await handleApplyLabel(menu.row.id, null); setMenu(null); }}>Clear override</button>
         </div>
       )}
     </div>
@@ -1325,13 +1435,13 @@ function ReportTable({
 function Cell({ value, type }: { value: any; type?: ColumnDef['type']; flagged?: boolean }) {
   if (type === 'currency' || type === 'percent' || type === 'number') return <span>{formatCell(value, type)}</span>;
   if (typeof value === 'string' && /high/i.test(value)) return <span className="pill bad">{value}</span>;
-  if (typeof value === 'string' && /medium|negative gross profit|unexpected|review|incorrect|improper|reorder|replenish|return candidate|medicaid|below minimum|open coverage/i.test(value)) {
+  if (typeof value === 'string' && /medium|negative gross profit|unexpected|review|incorrect|improper|reorder|replenish|return candidate|medicaid|below minimum|open coverage|needs review/i.test(value)) {
     return <span className="pill warn">{value}</span>;
   }
-  if (typeof value === 'string' && /healthy|paid correctly|no payment expected|low|stable|at or above preferred|resolved/i.test(value)) {
+  if (typeof value === 'string' && /healthy|paid correctly|no payment expected|low|stable|at or above preferred|resolved|no action needed/i.test(value)) {
     return <span className="pill good">{value}</span>;
   }
-  if (typeof value === 'string' && /pending|monitor|volume driver|stretch|do not flag|flag/i.test(value)) {
+  if (typeof value === 'string' && /pending|monitor|volume driver|stretch|do not flag|flag|excluded/i.test(value)) {
     return <span className="pill">{value}</span>;
   }
   return <span>{formatCell(value, type)}</span>;
