@@ -412,6 +412,18 @@ th {
   background: #f8fafc;
   z-index: 1;
 }
+.report-table-claims th,
+.report-table-claims td {
+  white-space: normal;
+  line-height: 1.35;
+}
+.report-table-claims td[data-priority="primary"] {
+  font-weight: 600;
+}
+.report-table-claims td[data-priority="optional"],
+.report-table-claims th[data-priority="optional"] {
+  display: none;
+}
 .sort-button {
   border: none;
   background: transparent;
@@ -483,6 +495,12 @@ th {
   .app { padding: 16px; }
   .executive-kpi-grid,
   .overview-metrics { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}
+@media (max-width: 1280px) {
+  .report-table-claims td[data-priority="secondary"],
+  .report-table-claims th[data-priority="secondary"] {
+    display: none;
+  }
 }
 
 .tabs.card {
