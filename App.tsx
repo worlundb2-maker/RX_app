@@ -464,15 +464,21 @@ export default function App() {
               </div>
             </div>
 
+            <div className="section-head" style={{ marginTop: 18 }}>
+              <div>
+                <div className="eyebrow">Finance-first dashboard KPIs</div>
+                <h3>Profitability and exposure at a glance</h3>
+              </div>
+            </div>
             <div className="grid executive-kpi-grid">
-              <ExecutiveKpi title="Recorded revenue" value={state.financeSummary?.recordedRevenue} type="currency" tone="neutral" onClick={() => openReport('Claims')} />
-              <ExecutiveKpi title="Modeled acquisition" value={state.financeSummary?.modeledAcquisition} type="currency" tone="neutral" onClick={() => openReport('Claims')} />
               <ExecutiveKpi title="Gross profit" value={state.financeSummary?.grossProfit} type="currency" tone={(state.financeSummary?.grossProfit || 0) >= 0 ? 'good' : 'bad'} onClick={() => openReport('Third Party')} />
               <ExecutiveKpi title="Gross margin" value={state.financeSummary?.grossMargin} type="percent" tone={(state.financeSummary?.grossMargin || 0) >= 0 ? 'good' : 'bad'} onClick={() => openReport('Third Party')} />
+              <ExecutiveKpi title="Recorded revenue" value={state.financeSummary?.recordedRevenue} type="currency" tone="neutral" onClick={() => openReport('Claims')} />
+              <ExecutiveKpi title="Modeled acquisition" value={state.financeSummary?.modeledAcquisition} type="currency" tone="neutral" onClick={() => openReport('Claims')} />
               <ExecutiveKpi title="SDRA collectible gap" value={state.financeSummary?.sdraCollectibleGap} type="currency" tone={(state.financeSummary?.sdraCollectibleGap || 0) > 0 ? 'warn' : 'good'} onClick={() => openReport('SDRA', { flaggedOnly: true })} />
               <ExecutiveKpi title="340B payment exposure" value={state.financeSummary?.improper340BExposure} type="currency" tone={(state.financeSummary?.improper340BExposure || 0) > 0 ? 'bad' : 'good'} onClick={() => openReport('340B', { flaggedOnly: true })} />
-              <ExecutiveKpi title="Weighted NDC savings" value={state.financeSummary?.weightedNdcSavings} type="currency" tone={(state.financeSummary?.weightedNdcSavings || 0) > 0 ? 'good' : 'neutral'} onClick={() => openReport('NDC', { flaggedOnly: true })} />
               <ExecutiveKpi title="Inventory value" value={state.financeSummary?.totalInventoryValue} type="currency" tone="neutral" onClick={() => openReport('Inventory')} />
+              <ExecutiveKpi title="Weighted NDC savings" value={state.financeSummary?.weightedNdcSavings} type="currency" tone={(state.financeSummary?.weightedNdcSavings || 0) > 0 ? 'good' : 'neutral'} onClick={() => openReport('NDC', { flaggedOnly: true })} />
             </div>
 
             <div className="grid two-col" style={{ marginTop: 18 }}>
@@ -890,12 +896,18 @@ export default function App() {
 
 
 function ExecutiveKpi({ title, value, type, tone = 'neutral', onClick }: { title:string; value:any; type?:ColumnDef['type']; tone?:'neutral'|'good'|'warn'|'bad'; onClick?:()=>void }) {
-  const renderedValue = formatCell(value, type);
+  const numericValue = Number(value || 0);
+  const isLargeCurrency = type === 'currency' && Math.abs(numericValue) >= 1000000;
+  const renderedValue = isLargeCurrency
+    ? new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(numericValue)
+    : formatCell(value, type);
+  const fullValue = isLargeCurrency ? formatCell(value, type) : '';
   const fitClass = renderedValue.length > 18 ? 'fit-xxs' : renderedValue.length > 15 ? 'fit-xs' : renderedValue.length > 12 ? 'fit-sm' : '';
   const content = (
     <>
       <div className="small-label">{title}</div>
       <div className={`executive-value ${fitClass}`}>{renderedValue}</div>
+      {fullValue && <div className="executive-subvalue">{fullValue}</div>}
     </>
   );
   return onClick ? (

@@ -148,7 +148,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 }
 
 .grid { display: grid; gap: 16px; }
-.executive-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 18px; }
+.executive-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 8px; }
 .two-col { grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); }
 .pharmacy-card-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .metric-grid { display: grid; gap: 12px; }
@@ -158,7 +158,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 .executive-kpi {
   position: relative;
   overflow: hidden;
-  min-height: 126px;
+  min-height: 138px;
   background: linear-gradient(180deg, #fff, #f8fbff);
 }
 .executive-kpi::after {
@@ -185,6 +185,14 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 .executive-value.fit-sm { font-size: clamp(18px, 1.5vw, 26px); }
 .executive-value.fit-xs { font-size: clamp(16px, 1.35vw, 22px); }
 .executive-value.fit-xxs { font-size: clamp(14px, 1.15vw, 19px); }
+
+.executive-subvalue {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
 
 .action-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .action-card {
@@ -289,9 +297,13 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
   word-break: break-word;
 }
 .metric-value {
-  font-size: 18px;
+  font-size: clamp(15px, 1.05vw, 18px);
   font-weight: 700;
   margin-top: 4px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
 }
 
 button.primary,
