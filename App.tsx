@@ -106,6 +106,7 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
@@ -191,6 +192,40 @@ export default function App() {
   async function clearDataset(dataset: string) {
     await fetch('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset }) });
     setMessage(`Cleared ${dataset}`);
+    loadState();
+  }
+
+  async function exportLocalBackup() {
+    const res = await fetch('/api/backup/export');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return setMessage(data.message || 'Backup export failed');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = /filename="([^"]+)"/i.exec(disposition);
+    const fileName = match?.[1] || `pharmacy-analytics-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage('Local backup exported');
+  }
+
+  async function restoreLocalBackupFromFile() {
+    if (!restoreFile) return setMessage('Choose a local backup file first');
+    const proceed = window.confirm('Restore will replace current local data and uploaded files. Continue?');
+    if (!proceed) return;
+    const fd = new FormData();
+    fd.append('file', restoreFile);
+    const res = await fetch('/api/backup/restore', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) return setMessage(data.message || 'Restore failed');
+    setRestoreFile(null);
+    setState(data.state || null);
+    setMessage('Local backup restored');
     loadState();
   }
 
@@ -640,6 +675,22 @@ export default function App() {
                 </div>
                 <div className="row" style={{ marginTop: 14 }}>
                   <button className="primary" type="button" onClick={scanInbox}>Scan inbox now</button>
+                </div>
+              </div>
+              <div className="card section-card">
+                <div className="eyebrow">Local backup</div>
+                <h3>Export and restore app data</h3>
+                <p className="section-copy">Backup and restore stay fully local. Export saves current app_data records plus uploaded source files into a single local JSON backup file. Restore replaces only local app data and does not change manual clear controls.</p>
+                <div className="row" style={{ marginTop: 12 }}>
+                  <button className="secondary" type="button" onClick={exportLocalBackup}>Export local backup</button>
+                </div>
+                <div className="form-grid" style={{ marginTop: 12 }}>
+                  <input
+                    type="file"
+                    accept=".json,.gz,.json.gz"
+                    onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+                  />
+                  <button className="primary" type="button" onClick={restoreLocalBackupFromFile}>Restore backup</button>
                 </div>
               </div>
               <div className="card section-card">
