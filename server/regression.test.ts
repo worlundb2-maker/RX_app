@@ -39,6 +39,11 @@ test.beforeEach(() => {
   resetDb();
 });
 
+test('fresh local database has no preloaded credentials', () => {
+  const db = readDb();
+  assert.equal(db.users.length, 0);
+});
+
 test('claim lifecycle guardrails exclude inactive claims from active analytics', () => {
   const pioneerPath = writeWorkbook('pioneer-lifecycle.xlsx', [
     {
