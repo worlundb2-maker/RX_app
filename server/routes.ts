@@ -2,13 +2,17 @@ import express from 'express';
 import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
+import zlib from 'node:zlib';
 import { randomUUID } from 'node:crypto';
-import { addUser, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
+import { addUser, buildLocalBackup, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, restoreLocalBackup, saveUpload, setReviewDecision } from './data';
 import { ingestUpload } from './parser';
 import { getAppState } from './analysis';
 import type { PharmacyCode, ReviewLabel, UploadType } from './types';
 
 const upload = multer({ dest: path.resolve(process.cwd(), 'uploads') });
+const backupTempDir = path.resolve(process.cwd(), 'backup_restore_tmp');
+fs.mkdirSync(backupTempDir, { recursive: true });
+const backupUpload = multer({ dest: backupTempDir, limits: { fileSize: 1024 * 1024 * 1024 } });
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 const inboxNamingExamples = [
   'SEMINOLE_pioneer_claims_01012026to03202026.xlsx',
@@ -138,6 +142,12 @@ function scanInbox() {
   };
 }
 
+function parseBackupFileBuffer(input: Buffer) {
+  const isGzip = input.length > 2 && input[0] === 0x1f && input[1] === 0x8b;
+  const text = isGzip ? zlib.gunzipSync(input).toString('utf8') : input.toString('utf8');
+  return JSON.parse(text);
+}
+
 export function registerRoutes(app: express.Express) {
   app.get('/api/bootstrap', (_req, res) => {
     res.json({
@@ -210,5 +220,38 @@ export function registerRoutes(app: express.Express) {
   app.post('/api/clear', express.json(), (req, res) => {
     clearDataset((req.body?.dataset || 'all') as any);
     res.json({ ok: true });
+  });
+
+  app.get('/api/backup/export', (_req, res) => {
+    try {
+      const backup = buildLocalBackup();
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `pharmacy-analytics-backup-${stamp}.json.gz`;
+      const zipped = zlib.gzipSync(JSON.stringify(backup), { level: zlib.constants.Z_BEST_COMPRESSION });
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.status(200).send(zipped);
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || 'Backup export failed' });
+    }
+  });
+
+  app.post('/api/backup/restore', backupUpload.single('file'), (req, res) => {
+    let tempFile = req.file?.path;
+    try {
+      if (!req.file?.path || !fs.existsSync(req.file.path)) {
+        return res.status(400).json({ message: 'Backup file is required' });
+      }
+      const rawFile = fs.readFileSync(req.file.path);
+      const payload = parseBackupFileBuffer(rawFile);
+      restoreLocalBackup(payload);
+      res.json({ ok: true, state: getAppState() });
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || 'Restore failed' });
+    } finally {
+      if (tempFile && fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    }
   });
 }

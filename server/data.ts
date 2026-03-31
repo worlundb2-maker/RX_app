@@ -14,6 +14,27 @@ const appDir = path.resolve(process.cwd(), 'app_data');
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
 export const ingestInboxDir = path.resolve(process.cwd(), 'ingest_inbox');
 const dbFile = path.join(appDir, 'db.json');
+const BACKUP_FORMAT_VERSION = 1;
+
+type BackupUploadFile = {
+  storedName: string;
+  originalName: string;
+  base64: string;
+};
+
+type LocalBackupPayload = {
+  type: 'pharmacy_analytics_backup';
+  formatVersion: number;
+  createdAt: string;
+  db: AppDb;
+  uploadFiles: BackupUploadFile[];
+};
+
+function assertSafeStoredName(storedName: string) {
+  if (!storedName || path.basename(storedName) !== storedName || storedName.includes('..')) {
+    throw new Error(`Invalid upload file name in backup data: ${storedName}`);
+  }
+}
 
 function createDefaultDb(): AppDb {
   return {
@@ -61,6 +82,96 @@ export function writeDb(db: AppDb) {
   const tempFile = `${dbFile}.tmp`;
   fs.writeFileSync(tempFile, JSON.stringify(db), 'utf8');
   fs.renameSync(tempFile, dbFile);
+}
+
+export function buildLocalBackup(): LocalBackupPayload {
+  const db = readDb();
+  const missingFiles: string[] = [];
+  const uploadFiles = db.uploads
+    .map((upload) => {
+      assertSafeStoredName(upload.storedName);
+      const full = path.join(uploadsDir, upload.storedName);
+      if (!fs.existsSync(full)) {
+        missingFiles.push(upload.originalName || upload.storedName);
+        return null;
+      }
+      const content = fs.readFileSync(full);
+      return {
+        storedName: upload.storedName,
+        originalName: upload.originalName,
+        base64: content.toString('base64'),
+      };
+    })
+    .filter(Boolean) as BackupUploadFile[];
+
+  if (missingFiles.length) {
+    throw new Error(`Backup export blocked: ${missingFiles.length} uploaded file(s) are missing locally`);
+  }
+
+  return {
+    type: 'pharmacy_analytics_backup',
+    formatVersion: BACKUP_FORMAT_VERSION,
+    createdAt: new Date().toISOString(),
+    db,
+    uploadFiles,
+  };
+}
+
+function normalizeDb(input: Partial<AppDb>): AppDb {
+  const fallback = createDefaultDb();
+  return {
+    ...fallback,
+    ...input,
+    schemaVersion: 4,
+    users: input.users ?? fallback.users,
+    uploads: input.uploads ?? [],
+    pioneerClaims: input.pioneerClaims ?? [],
+    mtfClaims: input.mtfClaims ?? [],
+    inventoryRows: input.inventoryRows ?? [],
+    priceRows: input.priceRows ?? [],
+    reviewDecisions: input.reviewDecisions ?? [],
+  };
+}
+
+export function restoreLocalBackup(raw: unknown) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Backup file is not valid JSON');
+  }
+  const backup = raw as Partial<LocalBackupPayload>;
+  if (backup.type !== 'pharmacy_analytics_backup') {
+    throw new Error('Unsupported backup format');
+  }
+  if (backup.formatVersion !== BACKUP_FORMAT_VERSION) {
+    throw new Error('Unsupported backup version');
+  }
+  if (!backup.db || !Array.isArray(backup.uploadFiles)) {
+    throw new Error('Backup payload is missing required fields');
+  }
+
+  const restoredDb = normalizeDb(backup.db as Partial<AppDb>);
+  const filesByStoredName = new Map(
+    backup.uploadFiles.map((file) => [file.storedName, file]),
+  );
+
+  for (const upload of restoredDb.uploads) {
+    if (!filesByStoredName.has(upload.storedName)) {
+      throw new Error(`Backup is missing file content for ${upload.originalName}`);
+    }
+  }
+
+  ensure();
+  for (const entry of fs.readdirSync(uploadsDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    fs.unlinkSync(path.join(uploadsDir, entry.name));
+  }
+
+  for (const uploadFile of backup.uploadFiles) {
+    assertSafeStoredName(uploadFile.storedName);
+    const fileBuffer = Buffer.from(uploadFile.base64 || '', 'base64');
+    fs.writeFileSync(path.join(uploadsDir, uploadFile.storedName), fileBuffer);
+  }
+
+  writeDb(restoredDb);
 }
 
 function norm(value: string | null | undefined) {
