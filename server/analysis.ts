@@ -229,12 +229,16 @@ function extractStrengthFromName(value: string | null | undefined): string {
   return normalizeStrength(matches?.[1] ?? '');
 }
 
-function drugStem(value: string | null | undefined): string {
-  return String(value || '')
-    .trim()
-    .split(/\s+/)[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+function ingredientKey(value: string | null | undefined): string {
+  const text = String(value || '').toLowerCase();
+  const cleaned = text
+    .replace(/([0-9.]+\s*(?:mg|mcg|g|ml|unit|units|%)(?:\/[0-9.]+\s*(?:ml|g))?)/gi, ' ')
+    .replace(/\b(tab(?:let)?s?|caps?(?:ule)?s?|softgel|inj(?:ection)?|pen|syringe|sol(?:ution)?|soln|susp(?:ension)?|cream|ointment|oint|gel|patch|drops?|oph|otic|inhal(?:er|ation)|hfa|dpi|neb(?:ulizer)?|kit)\b/gi, ' ')
+    .replace(/\b(er|xr|xl|sr|cr|dr|ir|odt|chewable|enteric|coated|ec)\b/gi, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  return cleaned.split(/\s+/).slice(0, 4).join(' ');
 }
 
 function normalizeGcn(value: string | null | undefined) {
@@ -275,12 +279,27 @@ function displayStrength(row: { drugName?: string | null; strength?: string | nu
   return row.strength || extractStrengthFromName(row.drugName) || '';
 }
 
-function equivalenceBasisLabel(args: { gcn?: string | null; strength?: string | null; form?: string | null }) {
+function formulationKey(value: string | null | undefined) {
+  const text = String(value || '').toLowerCase();
+  const tags: string[] = [];
+  if (/\b(xr|er|xl|extended[- ]release)\b/.test(text)) tags.push('er');
+  if (/\b(dr|delayed[- ]release)\b/.test(text)) tags.push('dr');
+  if (/\b(ir|immediate[- ]release)\b/.test(text)) tags.push('ir');
+  if (/\b(ec|enteric|enteric[- ]coated)\b/.test(text)) tags.push('ec');
+  if (/\b(odt|orally\s+disintegrating)\b/.test(text)) tags.push('odt');
+  if (/\b(chewable)\b/.test(text)) tags.push('chewable');
+  return tags.join('+');
+}
+
+function equivalenceBasisLabel(args: { gcn?: string | null; strength?: string | null; form?: string | null; formulation?: string | null }) {
   const hasGcn = Boolean(normalizeGcn(args.gcn));
   const hasStrength = Boolean(args.strength);
   const hasForm = Boolean(args.form);
+  const hasFormulation = Boolean(args.formulation);
+  if (hasGcn && hasStrength && hasForm && hasFormulation) return 'GCN + strength + form + formulation';
   if (hasGcn && hasStrength && hasForm) return 'GCN + strength + form';
   if (hasGcn && hasStrength) return 'GCN + strength';
+  if (hasStrength && hasForm && hasFormulation) return 'Drug + strength + form + formulation';
   if (hasStrength && hasForm) return 'Drug + strength + form';
   if (hasStrength) return 'Drug + strength';
   return 'Strength unresolved';
@@ -288,20 +307,22 @@ function equivalenceBasisLabel(args: { gcn?: string | null; strength?: string | 
 
 function priceFamilyKey(row: { gcn?: string; genericName?: string | null; drugName?: string | null; strength?: string | null; unit?: string | null }) {
   const gcn = normalizeGcn(row.gcn);
-  const stem = drugStem(row.genericName || row.drugName || '');
+  const ingredient = ingredientKey(row.genericName || row.drugName || '');
   const strength = priceStrength(row);
   const form = dosageFormKey(`${row.drugName || ''} ${row.genericName || ''} ${row.unit || ''}`) || 'na';
-  return `${gcn ? `gcn:${gcn}` : `stem:${stem || 'unknown'}`}|${strength || 'unknown'}|${form}`;
+  const formulation = formulationKey(`${row.drugName || ''} ${row.genericName || ''}`) || 'na';
+  return `${gcn ? `gcn:${gcn}` : `ingredient:${ingredient || 'unknown'}`}|${strength || 'unknown'}|${form}|${formulation}`;
 }
 
 function claimFamilyKey(claim: PioneerClaim, priceMaps: ReturnType<typeof buildPriceMaps>) {
   const ndc = cleanNdc(claim.ndc);
   const reference = priceMaps.byGroupExact.get(`${claim.inventoryGroup}|${ndc}`) || priceMaps.byAnyExact.get(ndc) || null;
   if (reference) return priceFamilyKey(reference);
-  const stem = drugStem(claim.drugName);
+  const ingredient = ingredientKey(claim.drugName);
   const strength = extractStrengthFromName(claim.drugName);
   const form = dosageFormKey(claim.drugName) || 'na';
-  return `${stem ? `stem:${stem}` : 'stem:unknown'}|${strength || 'unknown'}|${form}`;
+  const formulation = formulationKey(claim.drugName) || 'na';
+  return `${ingredient ? `ingredient:${ingredient}` : 'ingredient:unknown'}|${strength || 'unknown'}|${form}|${formulation}`;
 }
 
 function payerBucket(name: string) {
@@ -903,10 +924,16 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     const resolvedForm = groupExact
       ? (dosageFormKey(`${groupExact.drugName || ''} ${groupExact.genericName || ''} ${groupExact.unit || ''}`) || dosageFormKey(first.drugName))
       : dosageFormKey(first.drugName);
+    const resolvedFormulation = groupExact
+      ? (formulationKey(`${groupExact.drugName || ''} ${groupExact.genericName || ''}`) || formulationKey(first.drugName))
+      : formulationKey(first.drugName);
     const equivalenceBasis = groupExact
-      ? equivalenceBasisLabel({ gcn: groupExact.gcn, strength: resolvedStrength, form: resolvedForm })
-      : equivalenceBasisLabel({ strength: resolvedStrength, form: resolvedForm });
-    const comparisonReady = Boolean(groupExact) && Boolean(resolvedStrength) && !familyKey.includes('|unknown|');
+      ? equivalenceBasisLabel({ gcn: groupExact.gcn, strength: resolvedStrength, form: resolvedForm, formulation: resolvedFormulation })
+      : equivalenceBasisLabel({ strength: resolvedStrength, form: resolvedForm, formulation: resolvedFormulation });
+    const comparisonReady = Boolean(groupExact)
+      && Boolean(resolvedStrength)
+      && !familyKey.includes('ingredient:unknown')
+      && !familyKey.includes('|unknown|');
     const sameGroupAlternates = comparisonReady
       ? (priceMaps.byGroupFamily.get(`${first.inventoryGroup}|${familyKey}`) || [])
           .filter((row) => cleanNdc(row.ndc) !== ndc && row.acquisitionCost != null)
@@ -940,7 +967,7 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
       : !groupExact
         ? 'Current NDC not found in uploaded price files'
         : !comparisonReady
-          ? 'Strength could not be matched for equivalent comparison'
+          ? 'Drug identity, strength, form, or formulation could not be safely matched for equivalent comparison'
           : sameGroupSavingsTotal && sameGroupSavingsTotal > 0
             ? 'Equivalent lower-cost NDC available in same inventory group'
             : weightedSavingsTotal && weightedSavingsTotal > 0

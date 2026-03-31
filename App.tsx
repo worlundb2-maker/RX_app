@@ -761,7 +761,7 @@ export default function App() {
           <>
             <SectionOverview
               title="NDC optimization"
-              subtitle="Use global RX and 340B price files plus Pioneer claim mix to compare dispensed NDCs only against equivalent drugs, prioritizing GCN when available and requiring matched strength before savings are suggested."
+              subtitle="Use global RX and 340B price files plus Pioneer claim mix to compare dispensed NDCs only against true equivalents, prioritizing GCN when available and requiring the same drug, strength, dosage form, and formulation before savings are suggested."
               color={sectionColorMap.NDC}
               metrics={[
                 { label: 'Optimization rows', value: state.ndcSummary?.rows || 0, type: 'number' },
