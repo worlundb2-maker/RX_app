@@ -9,6 +9,9 @@
   --muted: #5f7086;
   --shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   --shadow-soft: 0 4px 14px rgba(15, 23, 42, 0.05);
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.2);
 }
 
 * { box-sizing: border-box; }
@@ -24,6 +27,12 @@ body {
 button, input, select { font: inherit; }
 button { transition: 0.18s ease; }
 button:hover { transform: translateY(-1px); }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 
 .app-shell {
   position: relative;
@@ -41,7 +50,7 @@ button:hover { transform: translateY(-1px); }
   position: relative;
   max-width: 1550px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 28px 24px 34px;
 }
 
 .loading-state {
@@ -52,7 +61,7 @@ button:hover { transform: translateY(-1px); }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   box-shadow: var(--shadow-soft);
 }
@@ -68,6 +77,9 @@ button:hover { transform: translateY(-1px); }
   align-items: flex-start;
   gap: 20px;
   margin-bottom: 16px;
+  position: sticky;
+  top: 10px;
+  z-index: 15;
 }
 
 h1, h2, h3 { margin: 0; line-height: 1.15; }
@@ -101,10 +113,11 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
 }
 .tab {
   border: 1px solid var(--border);
-  background: #fff;
+  background: linear-gradient(180deg, #fff, #fbfdff);
   color: var(--text);
   padding: 10px 15px;
   border-radius: 999px;
@@ -113,12 +126,14 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 }
 .tab.active {
   box-shadow: inset 0 0 0 1px currentColor;
+  font-weight: 700;
 }
 
 .message-banner {
   margin-bottom: 16px;
   border-color: #bfdbfe;
   background: #eff6ff;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.08);
 }
 
 .hero-card {
@@ -191,10 +206,13 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
   text-align: left;
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #fff, #f8fbff);
-  border-radius: 18px;
+  border-radius: var(--radius-md);
   padding: 16px;
   cursor: pointer;
   box-shadow: var(--shadow-soft);
+}
+.action-card:hover {
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.09);
 }
 .action-card.tone-good { border-color: rgba(22, 163, 74, 0.22); }
 .action-card.tone-warn { border-color: rgba(245, 158, 11, 0.28); }
@@ -246,7 +264,7 @@ p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
 }
 .overview-metric {
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 14px 14px 12px;
   background: linear-gradient(180deg, #fff, #fbfdff);
 }
@@ -305,18 +323,19 @@ select,
 input, select {
   padding: 10px 12px;
   border: 1px solid #cbd5e1;
-  background: white;
+  background: linear-gradient(180deg, #fff, #fbfdff);
   width: 100%;
 }
 button.primary {
   border: none;
-  background: #132238;
+  background: linear-gradient(135deg, #132238, #1f3a61);
   color: white;
   padding: 10px 14px;
   cursor: pointer;
+  box-shadow: 0 10px 20px rgba(19, 34, 56, 0.18);
 }
 button.secondary {
-  background: white;
+  background: linear-gradient(180deg, #fff, #f8fbff);
   color: var(--text);
   border: 1px solid #cbd5e1;
   padding: 10px 14px;
@@ -394,7 +413,7 @@ button.secondary {
   overflow: auto;
   max-height: 560px;
   border: 1px solid #e2e8f0;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: white;
 }
 .table-wrap table,
@@ -409,7 +428,7 @@ th, td {
 th {
   position: sticky;
   top: 0;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
   z-index: 1;
 }
 .report-table-claims th,
@@ -551,7 +570,7 @@ th {
 .queue-table-wrap {
   margin-top: 14px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   overflow: auto;
 }
 
@@ -580,7 +599,7 @@ th {
   min-width: 170px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: white;
   box-shadow: var(--shadow);
 }
