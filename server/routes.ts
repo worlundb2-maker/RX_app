@@ -51,7 +51,7 @@ function detectInboxTypeFromTokens(tokens: string[]): UploadType | null {
   return null;
 }
 
-function parseInboxAssignment(fileName: string): { type: UploadType; pharmacyCode?: PharmacyCode } | null {
+export function parseInboxAssignment(fileName: string): { type: UploadType; pharmacyCode?: PharmacyCode } | null {
   const baseName = path.basename(fileName);
   const legacyMatch = /^(.*?)__(pioneer|mtf_adjustment|mtf|inventory|price_rx|price_340b)__(.+)$/i.exec(baseName);
   if (legacyMatch) {
