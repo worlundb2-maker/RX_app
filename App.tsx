@@ -108,7 +108,7 @@ const sectionColorMap: Record<Section, string> = {
 };
 
 export default function App() {
-  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; inbox?: { folder?: string; examples?: string[] }} | null>(null);
+  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; auth?: { hasUsers?: boolean; requiresSetup?: boolean }; inbox?: { folder?: string; examples?: string[] }} | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [section, setSection] = useState<Section>('Dashboard');
   const [user, setUser] = useState<User | null>(null);
@@ -117,6 +117,7 @@ export default function App() {
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
+  const [setupForm, setSetupForm] = useState({ username: '', password: '', displayName: '' });
   const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
@@ -165,6 +166,22 @@ export default function App() {
     setUser(data.user);
     loadState(selectedPharmacy);
     setMessage('Logged in');
+  }
+
+  async function setupAdmin(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await fetch('/api/setup-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...setupForm, role: 'admin' }),
+    });
+    const data = await res.json();
+    if (!res.ok) return setMessage(data.message || 'Unable to create initial admin');
+    setUser(data.user);
+    setSetupForm({ username: '', password: '', displayName: '' });
+    setMessage('Initial admin account created');
+    setBootstrap((prev) => prev ? ({ ...prev, auth: { hasUsers: true, requiresSetup: false } }) : prev);
+    loadState(selectedPharmacy);
   }
 
   async function handleUpload(e: React.FormEvent) {
@@ -384,6 +401,7 @@ export default function App() {
 
   if (!bootstrap) return <div className="app"><div className="loading-state">Loading…</div></div>;
   if (!user) {
+    const requiresSetup = Boolean(bootstrap?.auth?.requiresSetup);
     return (
       <div className="app-shell">
         <div className="app-bg" />
@@ -401,13 +419,26 @@ export default function App() {
           {message && <div className="message-banner card">{message}</div>}
           <div className="card section-card" style={{ maxWidth: 460, margin: '20px auto' }}>
             <div className="eyebrow">Authentication required</div>
-            <h3>Log in to continue</h3>
-            <p className="section-copy">Enter your assigned local credentials to access the dashboard.</p>
-            <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
-              <input name="username" placeholder="Username" autoComplete="username" />
-              <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
-              <button className="primary" type="submit">Log in</button>
-            </form>
+            <h3>{requiresSetup ? 'Create initial local admin account' : 'Log in to continue'}</h3>
+            <p className="section-copy">
+              {requiresSetup
+                ? 'No credentials are preloaded. Create the first local admin account for this install.'
+                : 'Enter your assigned local credentials to access the dashboard.'}
+            </p>
+            {requiresSetup ? (
+              <form onSubmit={setupAdmin} className="form-grid" style={{ marginTop: 14 }}>
+                <input placeholder="Display name" value={setupForm.displayName} onChange={(e) => setSetupForm({ ...setupForm, displayName: e.target.value })} />
+                <input placeholder="Username" autoComplete="username" value={setupForm.username} onChange={(e) => setSetupForm({ ...setupForm, username: e.target.value })} />
+                <input type="password" placeholder="Password" autoComplete="new-password" value={setupForm.password} onChange={(e) => setSetupForm({ ...setupForm, password: e.target.value })} />
+                <button className="primary" type="submit">Create admin and continue</button>
+              </form>
+            ) : (
+              <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
+                <input name="username" placeholder="Username" autoComplete="username" />
+                <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
+                <button className="primary" type="submit">Log in</button>
+              </form>
+            )}
           </div>
         </div>
       </div>
