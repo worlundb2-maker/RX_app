@@ -668,6 +668,9 @@ export default function App() {
               subtitle="Monitor RX collectible gap, improper 340B payment exposure, pending items, and unexpected payment rows from MTF plus adjustment uploads."
               color={sectionColorMap.SDRA}
               metrics={[
+                { label: 'Total expected', value: state.sdraSummary?.totalExpected || 0, type: 'currency', tone: 'neutral' },
+                { label: 'Total actual', value: state.sdraSummary?.totalActual || 0, type: 'currency', tone: 'neutral' },
+                { label: 'Total variance', value: state.sdraSummary?.totalVariance || 0, type: 'currency', tone: (state.sdraSummary?.totalVariance || 0) > 0 ? 'good' : (state.sdraSummary?.totalVariance || 0) < 0 ? 'bad' : 'neutral' },
                 { label: 'Should have been paid and was paid', value: state.sdraSummary?.shouldHaveBeenPaidAndWasPaid || 0, type: 'currency', tone: 'good' },
                 { label: 'Should not have been paid and was paid', value: state.sdraSummary?.shouldNotHaveBeenPaidAndWasPaid || 0, type: 'currency', tone: 'bad', onClick: () => setReportContext({ section: 'SDRA', filterText: '340B', flaggedOnly: true }) },
                 { label: 'Correctly paid', value: state.sdraSummary?.correctlyPaidAmount || 0, type: 'currency', tone: 'good' },
