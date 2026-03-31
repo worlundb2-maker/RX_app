@@ -1,0 +1,24 @@
+WINDOWS OPEN STEPS
+
+Preferred launcher
+1. Extract the zip.
+2. Keep the folder named node-v24.14.0-win-x64 beside Open Pharmacy Analytics.exe.
+3. Double-click Open Pharmacy Analytics.exe.
+4. Browser should open to http://127.0.0.1:5000
+
+Direct open bypass if the launcher is blocked or closes
+1. Open the extracted app folder.
+2. Click the address bar, type cmd, and press Enter.
+3. Run these commands:
+
+cd /d C:\RX_Analytics
+set "PATH=%CD%\node-v24.14.0-win-x64;%PATH%"
+"%CD%\node-v24.14.0-win-x64\node.exe" "%CD%\node_modules\tsx\dist\cli.mjs" "%CD%\server\index.ts" --production
+
+4. Leave that Command Prompt window open.
+5. Open http://127.0.0.1:5000 in the browser.
+
+Notes
+- This package does not require npm install.
+- The app now serves the current source directly, so it does not depend on a rebuilt dist folder.
+- If the launcher fails, launcher.log and launcher-server.log should be created.

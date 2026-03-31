@@ -1,0 +1,4 @@
+Baseline decision:
+- Used pharmacy_final_local_merged_build.zip as the behavioral reference
+- Rebuilt the implementation shell and UI from the Foundation framework rather than patching forward partial UI changes
+- Preserved existing working behaviors for SDRA, grouping, drilldown, filtering, sorting, export, and global price file handling

@@ -1,0 +1,32 @@
+Completed tweak set on top of the no-install local build.
+
+Key changes
+- 340B compliance
+  - Added OHCA and the requested Oklahoma Medicaid MCO names to Medicaid recognition.
+  - RX inventory on 340B / 340B Referral prescriber is no longer auto-flagged when the claim is Medicaid.
+  - 340B inventory + 340B Referral prescriber is now grouped as a referral verification queue instead of being flagged claim-by-claim.
+- Dashboard / drillability
+  - Executive KPI tiles are clickable.
+  - Overview severity metrics on major tabs are clickable to open filtered report views.
+  - Reports remain grouped and only show claim detail on drilldown.
+- Third party
+  - Added RX CASH visibility.
+  - Added Medicaid claim counts.
+  - Added high gross profit group count excluding cash.
+- Claims
+  - Day-supply pattern flagging ignores 1 stock-size fills when that stock size equals 7, 14, or 28 days.
+- Staffing
+  - Capacity framework now uses RX per day, not RX per week.
+  - 4.5-day normalization remains available for context.
+- Uploads
+  - Added multi-file queue so files can be added all at once and manually designated before upload.
+- Manual review labeling
+  - Right-click report rows to label them as Flag, Do not flag, or Resolved.
+  - Labels persist in the local database.
+
+Validation completed in this environment
+- TypeScript check passed.
+
+Important note
+- This environment could not run the Windows-specific node_modules for a live start test.
+- The package is set to serve the current source directly on Windows, so it does not depend on rebuilding dist.
