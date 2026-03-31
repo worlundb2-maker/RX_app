@@ -106,6 +106,7 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [sftpForm, setSftpForm] = useState({ host: '', port: '22', username: '', password: '', remoteDir: '.' });
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
@@ -158,22 +159,31 @@ export default function App() {
     if (!uploadQueue.length) return setMessage('No queued files to upload');
     let successCount = 0;
     const notes: string[] = [];
+    const failedItems: UploadQueueItem[] = [];
     for (const item of uploadQueue) {
-      const fd = new FormData();
-      fd.append('file', item.file);
-      fd.append('type', item.type);
-      if (!isGlobalUpload(item.type)) fd.append('pharmacyCode', item.pharmacyCode);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (res.ok) {
-        successCount += 1;
-        notes.push(`${item.file.name}: ${data.rows}/${data.sourceRows}`);
-      } else {
-        notes.push(`${item.file.name}: ${data.message || 'Upload failed'}`);
+      try {
+        const fd = new FormData();
+        fd.append('file', item.file);
+        fd.append('type', item.type);
+        if (!isGlobalUpload(item.type)) fd.append('pharmacyCode', item.pharmacyCode);
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok) {
+          successCount += 1;
+          notes.push(`${item.file.name}: ${data.rows}/${data.sourceRows}`);
+        } else {
+          failedItems.push(item);
+          notes.push(`${item.file.name}: ${data.message || 'Upload failed'}`);
+        }
+      } catch {
+        failedItems.push(item);
+        notes.push(`${item.file.name}: Upload request failed`);
       }
     }
-    setUploadQueue([]);
-    setMessage(`${successCount} of ${notes.length} queued files uploaded · ${notes.join(' | ')}`);
+    setUploadQueue(failedItems);
+    const failedCount = notes.length - successCount;
+    const retryNote = failedCount ? ` · ${failedCount} kept in queue for retry` : '';
+    setMessage(`${successCount} of ${notes.length} queued files uploaded${retryNote} · ${notes.join(' | ')}`);
     loadState();
   }
 
@@ -198,9 +208,33 @@ export default function App() {
     const res = await fetch('/api/inbox/scan', { method: 'POST' });
     const data = await res.json();
     if (!res.ok) return setMessage(data.message || 'Inbox scan failed');
-    const note = `${data.importedCount || 0} imported`;
-    const rejected = data.rejectedCount ? ` · ${data.rejectedCount} rejected` : '';
-    setMessage(`Inbox scan complete: ${note}${rejected}`);
+    const imported = data.importedCount || 0;
+    const rejectedCount = data.rejectedCount || 0;
+    const rejectedSummary = rejectedCount
+      ? ` · rejected: ${(data.rejected || []).slice(0, 3).map((item: any) => `${item.file} (${item.reason})`).join('; ')}`
+      : '';
+    setMessage(`Inbox scan complete: ${imported} imported, ${rejectedCount} rejected${rejectedSummary}`);
+    loadState();
+  }
+
+  async function importFromSftp() {
+    const res = await fetch('/api/inbox/sftp-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host: sftpForm.host,
+        port: Number(sftpForm.port || 22),
+        username: sftpForm.username,
+        password: sftpForm.password,
+        remoteDir: sftpForm.remoteDir,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return setMessage(data.message || 'SFTP import failed');
+    const imported = data.importedCount || 0;
+    const rejected = data.rejectedCount || 0;
+    const downloaded = data.downloadedCount || 0;
+    setMessage(`SFTP import complete: ${downloaded} downloaded · ${imported} imported · ${rejected} rejected`);
     loadState();
   }
 
@@ -640,6 +674,17 @@ export default function App() {
                 </div>
                 <div className="row" style={{ marginTop: 14 }}>
                   <button className="primary" type="button" onClick={scanInbox}>Scan inbox now</button>
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <div className="small-label">Import from SFTP credentials</div>
+                  <div className="form-grid" style={{ marginTop: 8 }}>
+                    <input placeholder="Host" value={sftpForm.host} onChange={(e) => setSftpForm({ ...sftpForm, host: e.target.value })} />
+                    <input placeholder="Port" value={sftpForm.port} onChange={(e) => setSftpForm({ ...sftpForm, port: e.target.value })} />
+                    <input placeholder="Username" value={sftpForm.username} onChange={(e) => setSftpForm({ ...sftpForm, username: e.target.value })} />
+                    <input placeholder="Password" type="password" value={sftpForm.password} onChange={(e) => setSftpForm({ ...sftpForm, password: e.target.value })} />
+                    <input placeholder="Remote folder" value={sftpForm.remoteDir} onChange={(e) => setSftpForm({ ...sftpForm, remoteDir: e.target.value })} />
+                    <button className="secondary" type="button" onClick={importFromSftp}>Pull and scan</button>
+                  </div>
                 </div>
               </div>
               <div className="card section-card">

@@ -14,6 +14,7 @@ const appDir = path.resolve(process.cwd(), 'app_data');
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
 export const ingestInboxDir = path.resolve(process.cwd(), 'ingest_inbox');
 const dbFile = path.join(appDir, 'db.json');
+const dbBackupFile = `${dbFile}.bak`;
 
 function createDefaultDb(): AppDb {
   return {
@@ -41,7 +42,20 @@ function ensure() {
 
 export function readDb(): AppDb {
   ensure();
-  const parsed = JSON.parse(fs.readFileSync(dbFile, 'utf8')) as Partial<AppDb>;
+  let parsed: Partial<AppDb>;
+  try {
+    parsed = JSON.parse(fs.readFileSync(dbFile, 'utf8')) as Partial<AppDb>;
+  } catch (primaryError) {
+    if (!fs.existsSync(dbBackupFile)) throw new Error('Unable to read local database file');
+    try {
+      parsed = JSON.parse(fs.readFileSync(dbBackupFile, 'utf8')) as Partial<AppDb>;
+    } catch {
+      throw new Error('Unable to read local database file or backup');
+    }
+    const tempFile = `${dbFile}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(parsed), 'utf8');
+    fs.renameSync(tempFile, dbFile);
+  }
   return {
     ...createDefaultDb(),
     ...parsed,
@@ -58,6 +72,17 @@ export function readDb(): AppDb {
 
 export function writeDb(db: AppDb) {
   ensure();
+  if (fs.existsSync(dbFile)) {
+    try {
+      JSON.parse(fs.readFileSync(dbFile, 'utf8'));
+      const backupTempFile = `${dbBackupFile}.tmp`;
+      fs.copyFileSync(dbFile, backupTempFile);
+      fs.renameSync(backupTempFile, dbBackupFile);
+    } catch {
+      // Keep last known good backup if the current db file is unreadable.
+    }
+  }
+
   const tempFile = `${dbFile}.tmp`;
   fs.writeFileSync(tempFile, JSON.stringify(db), 'utf8');
   fs.renameSync(tempFile, dbFile);
