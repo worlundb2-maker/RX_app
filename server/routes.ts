@@ -10,6 +10,7 @@ import type { PharmacyCode, ReviewLabel, UploadType } from './types';
 
 const upload = multer({ dest: path.resolve(process.cwd(), 'uploads') });
 const uploadDir = path.resolve(process.cwd(), 'uploads');
+const sessions = new Map<string, string>();
 const inboxNamingExamples = [
   'SEMINOLE_pioneer_claims_01012026to03202026.xlsx',
   'SEMINOLE_mtf_payments.csv',
@@ -139,11 +140,34 @@ function scanInbox() {
 }
 
 export function registerRoutes(app: express.Express) {
+  function parseCookies(req: express.Request) {
+    const raw = String(req.headers.cookie || '');
+    return raw.split(';').reduce<Record<string, string>>((acc, pair) => {
+      const [key, ...rest] = pair.trim().split('=');
+      if (!key) return acc;
+      acc[key] = decodeURIComponent(rest.join('=') || '');
+      return acc;
+    }, {});
+  }
+
+  function authenticatedUser(req: express.Request) {
+    const token = parseCookies(req).rx_session;
+    if (!token) return null;
+    const userId = sessions.get(token);
+    if (!userId) return null;
+    return readDb().users.find((u) => u.id === userId) || null;
+  }
+
+  function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const user = authenticatedUser(req);
+    if (!user) return res.status(401).json({ message: 'Authentication required' });
+    (req as any).user = user;
+    next();
+  }
+
   app.get('/api/bootstrap', (_req, res) => {
     res.json({
       pharmacies: PHARMACIES,
-      hasDefaultAdmin: true,
-      defaultLogin: { username: 'admin', password: 'admin' },
       inbox: {
         folder: ingestInboxDir,
         examples: inboxNamingExamples,
@@ -151,7 +175,7 @@ export function registerRoutes(app: express.Express) {
     });
   });
 
-  app.get('/api/state', (req, res) => {
+  app.get('/api/state', requireAuth, (req, res) => {
     const pharmacyCode = typeof req.query.pharmacyCode === 'string' && req.query.pharmacyCode !== 'ALL' ? req.query.pharmacyCode as PharmacyCode : undefined;
     res.json(getAppState(pharmacyCode));
   });
@@ -161,17 +185,27 @@ export function registerRoutes(app: express.Express) {
     const db = readDb();
     const user = db.users.find((u) => u.username === username && u.password === password);
     if (!user) return res.status(401).json({ message: 'Invalid username or password' });
+    const token = randomUUID();
+    sessions.set(token, user.id);
+    res.setHeader('Set-Cookie', `rx_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Strict`);
     res.json({ user: { id: user.id, username: user.username, role: user.role, displayName: user.displayName } });
   });
 
-  app.post('/api/users', express.json(), (req, res) => {
+  app.post('/api/logout', (req, res) => {
+    const token = parseCookies(req).rx_session;
+    if (token) sessions.delete(token);
+    res.setHeader('Set-Cookie', 'rx_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict');
+    res.json({ ok: true });
+  });
+
+  app.post('/api/users', requireAuth, express.json(), (req, res) => {
     const { username, password, role, displayName } = req.body ?? {};
     if (!username || !password || !role || !displayName) return res.status(400).json({ message: 'All user fields are required' });
     addUser({ username, password, role, displayName });
     res.json({ ok: true });
   });
 
-  app.post('/api/upload', upload.single('file'), (req, res) => {
+  app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
     try {
       const type = req.body.type as UploadType;
       const pharmacyCode = (req.body.pharmacyCode || undefined) as PharmacyCode | undefined;
@@ -185,7 +219,7 @@ export function registerRoutes(app: express.Express) {
     }
   });
 
-  app.post('/api/inbox/scan', (_req, res) => {
+  app.post('/api/inbox/scan', requireAuth, (_req, res) => {
     try {
       res.json({ ok: true, ...scanInbox() });
     } catch (error: any) {
@@ -193,7 +227,7 @@ export function registerRoutes(app: express.Express) {
     }
   });
 
-  app.post('/api/review-decision', express.json(), (req, res) => {
+  app.post('/api/review-decision', requireAuth, express.json(), (req, res) => {
     const targetKey = typeof req.body?.targetKey === 'string' ? req.body.targetKey.trim() : '';
     const label = req.body?.label as ReviewLabel | null;
     const pharmacyCode = typeof req.body?.pharmacyCode === 'string' && req.body.pharmacyCode !== 'ALL'
@@ -207,7 +241,7 @@ export function registerRoutes(app: express.Express) {
     res.json({ ok: true, state: getAppState(pharmacyCode) });
   });
 
-  app.post('/api/clear', express.json(), (req, res) => {
+  app.post('/api/clear', requireAuth, express.json(), (req, res) => {
     clearDataset((req.body?.dataset || 'all') as any);
     res.json({ ok: true });
   });

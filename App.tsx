@@ -41,6 +41,15 @@ type AppState = {
 
 type UploadType = 'pioneer' | 'mtf' | 'mtf_adjustment' | 'inventory' | 'price_rx' | 'price_340b';
 type UploadQueueItem = { id:string; file: File; type: UploadType; pharmacyCode: string };
+type ManualStaffEntry = {
+  id: string;
+  pharmacyCode: string;
+  roleLabel: string;
+  allocated: number;
+  covered: number;
+  names: string;
+  notes: string;
+};
 
 type ColumnDef = {
   key: string;
@@ -85,20 +94,20 @@ const uploadTypeLabels: Record<UploadType, string> = {
 };
 
 const sectionColorMap: Record<Section, string> = {
-  Dashboard: '#132238',
+  Dashboard: '#1f2937',
   Uploads: '#334155',
-  SDRA: '#7c2d12',
+  SDRA: '#6b7280',
   Claims: '#0f766e',
-  'Third Party': '#4338ca',
-  Inventory: '#0f766e',
-  NDC: '#14532d',
-  '340B': '#991b1b',
-  Staffing: '#1d4ed8',
-  Users: '#475569',
+  'Third Party': '#0b3b66',
+  Inventory: '#1d4d4f',
+  NDC: '#1f5f4a',
+  '340B': '#7f1d1d',
+  Staffing: '#1e40af',
+  Users: '#4b5563',
 };
 
 export default function App() {
-  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; defaultLogin:any; inbox?: { folder?: string; examples?: string[] }} | null>(null);
+  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; inbox?: { folder?: string; examples?: string[] }} | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [section, setSection] = useState<Section>('Dashboard');
   const [user, setUser] = useState<User | null>(null);
@@ -107,6 +116,8 @@ export default function App() {
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
+  const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
+  const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
 
@@ -117,16 +128,32 @@ export default function App() {
   async function loadState(pharmacyCode = selectedPharmacy) {
     const query = pharmacyCode && pharmacyCode !== 'ALL' ? `?pharmacyCode=${pharmacyCode}` : '';
     const res = await fetch(`/api/state${query}`);
+    if (res.status === 401) {
+      setUser(null);
+      setState(null);
+      return;
+    }
     setState(await res.json());
   }
 
   useEffect(() => {
     fetch('/api/bootstrap').then((r) => r.json()).then(setBootstrap);
+    try {
+      const stored = localStorage.getItem('manual_staff_entries_v1');
+      if (stored) setManualStaffEntries(JSON.parse(stored));
+    } catch {
+      // ignore malformed local staffing entries
+    }
   }, []);
 
   useEffect(() => {
+    localStorage.setItem('manual_staff_entries_v1', JSON.stringify(manualStaffEntries));
+  }, [manualStaffEntries]);
+
+  useEffect(() => {
+    if (!user) return;
     loadState(selectedPharmacy);
-  }, [selectedPharmacy]);
+  }, [selectedPharmacy, user]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -135,6 +162,7 @@ export default function App() {
     const data = await res.json();
     if (!res.ok) return setMessage(data.message || 'Login failed');
     setUser(data.user);
+    loadState(selectedPharmacy);
     setMessage('Logged in');
   }
 
@@ -229,6 +257,41 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  function logout() {
+    fetch('/api/logout', { method: 'POST' }).catch(() => null);
+    setUser(null);
+    setState(null);
+    setSection('Dashboard');
+    setMessage('Logged out');
+  }
+
+  function addManualStaffEntry(e: React.FormEvent) {
+    e.preventDefault();
+    const roleLabel = manualStaffForm.roleLabel.trim();
+    const allocated = Number(manualStaffForm.allocated || 0);
+    const covered = Number(manualStaffForm.covered || 0);
+    if (!roleLabel) return setMessage('Role/position is required');
+    if (!Number.isFinite(allocated) || allocated < 0) return setMessage('Allocated spots must be 0 or greater');
+    if (!Number.isFinite(covered) || covered < 0) return setMessage('Covered spots must be 0 or greater');
+    const entry: ManualStaffEntry = {
+      id: `${manualStaffForm.pharmacyCode}-${roleLabel}-${Date.now()}`,
+      pharmacyCode: manualStaffForm.pharmacyCode,
+      roleLabel,
+      allocated,
+      covered,
+      names: manualStaffForm.names.trim(),
+      notes: manualStaffForm.notes.trim(),
+    };
+    setManualStaffEntries((prev) => [...prev, entry]);
+    setManualStaffForm((prev) => ({ ...prev, roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' }));
+    setMessage('Manual staffing entry added');
+  }
+
+  function removeManualStaffEntry(id: string) {
+    setManualStaffEntries((prev) => prev.filter((item) => item.id !== id));
+    setMessage('Manual staffing entry removed');
+  }
+
   const visibleReportContext = reportContext.section === section ? reportContext : undefined;
 
   const topFindings = useMemo(() => {
@@ -284,7 +347,72 @@ export default function App() {
     );
   }, [state]);
 
-  if (!bootstrap || !state) return <div className="app"><div className="loading-state">Loading…</div></div>;
+  const manualStaffRows = useMemo(() => {
+    if (!bootstrap) return [];
+    return manualStaffEntries.map((entry) => {
+      const pharmacy = bootstrap.pharmacies.find((item) => item.code === entry.pharmacyCode);
+      const openPositions = Math.max(Number(entry.allocated) - Number(entry.covered), 0);
+      return {
+        id: `manual-${entry.id}`,
+        pharmacyCode: entry.pharmacyCode,
+        pharmacyName: pharmacy?.name || entry.pharmacyCode,
+        pharmacyColor: pharmacy?.color || '#64748b',
+        roleLabel: entry.roleLabel,
+        rxRange: 'Manual',
+        avgRxPerWeightedDay: null,
+        weightedOperatingDays: null,
+        allocated: Number(entry.allocated),
+        availableCoverage: Number(entry.covered),
+        openPositions,
+        stretchNeed: null,
+        preferredNeed: null,
+        status: openPositions > 0 ? 'Open coverage needed' : 'Fully covered',
+        pressureLevel: openPositions > 0 ? 'medium' : 'low',
+        flagged: openPositions > 0,
+        severity: openPositions > 0 ? 'medium' : 'low',
+        flagReason: openPositions > 0 ? 'Manual entry shows open coverage' : null,
+        details: {
+          columns: ['Named coverage', 'Notes'],
+          rows: [[entry.names || 'No names entered', entry.notes || 'Manual staffing entry']],
+        },
+      };
+    });
+  }, [manualStaffEntries, bootstrap]);
+
+  const staffingRowsWithManual = useMemo(() => [...staffingRows, ...manualStaffRows], [staffingRows, manualStaffRows]);
+
+  if (!bootstrap) return <div className="app"><div className="loading-state">Loading…</div></div>;
+  if (!user) {
+    return (
+      <div className="app-shell">
+        <div className="app-bg" />
+        <div className="app">
+          <header className="topbar card glass-card">
+            <div>
+              <div className="eyebrow">Foundation-aligned local build</div>
+              <h1>Pharmacy Analytics</h1>
+              <div className="subtitle">Finance-forward pharmacy intelligence with row-level drilldown, manual clear controls, and store-level color identity across Konawa, Monte Vista, Arlington, and Seminole.</div>
+            </div>
+            <div className="header-actions">
+              <div className="status-chip">Not logged in</div>
+            </div>
+          </header>
+          {message && <div className="message-banner card">{message}</div>}
+          <div className="card section-card" style={{ maxWidth: 460, margin: '20px auto' }}>
+            <div className="eyebrow">Authentication required</div>
+            <h3>Log in to continue</h3>
+            <p className="section-copy">Enter your assigned local credentials to access the dashboard.</p>
+            <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
+              <input name="username" placeholder="Username" autoComplete="username" />
+              <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
+              <button className="primary" type="submit">Log in</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!state) return <div className="app"><div className="loading-state">Loading…</div></div>;
 
   const pharmacyLookup = bootstrap.pharmacies.reduce<Record<string, Pharmacy>>((acc, pharmacy) => {
     acc[pharmacy.code] = pharmacy;
@@ -431,16 +559,20 @@ export default function App() {
             <div className="subtitle">Finance-forward pharmacy intelligence with row-level drilldown, manual clear controls, and store-level color identity across Konawa, Monte Vista, Arlington, and Seminole.</div>
           </div>
           <div className="header-actions">
-            <select value={selectedPharmacy} onChange={(e) => setSelectedPharmacy(e.target.value)}>
-              <option value="ALL">All pharmacies</option>
-              {bootstrap.pharmacies.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-            </select>
-            <div className="status-chip">
-              {user ? `${user.displayName} (${user.role})` : `Default login: ${bootstrap.defaultLogin.username}/${bootstrap.defaultLogin.password}`}
-            </div>
+            {user && (
+              <select value={selectedPharmacy} onChange={(e) => setSelectedPharmacy(e.target.value)}>
+                <option value="ALL">All pharmacies</option>
+                {bootstrap.pharmacies.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            )}
+            <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
+            {user && <button className="secondary" type="button" onClick={logout}>Log out</button>}
           </div>
         </header>
 
+        {message && <div className="message-banner card">{message}</div>}
+
+        <>
         <div className="tabs card">
           {sections.map((s) => (
             <button key={s} className={`tab ${section === s ? 'active' : ''}`} style={section === s ? { borderColor: sectionColorMap[s], background: `${sectionColorMap[s]}14`, color: sectionColorMap[s] } : undefined} onClick={() => setSection(s)}>
@@ -448,8 +580,6 @@ export default function App() {
             </button>
           ))}
         </div>
-
-        {message && <div className="message-banner card">{message}</div>}
 
         {section === 'Dashboard' && (
           <>
@@ -494,28 +624,16 @@ export default function App() {
                   <ActionQueueCard title="Upload integrity" value={state.uploads.length} hint="Manual clear remains available on every dataset" tone="neutral" onClick={() => openReport('Uploads')} />
                 </div>
               </div>
-              {!user ? (
-                <div className="card section-card">
-                  <div className="eyebrow">Authentication</div>
-                  <h3>Log in</h3>
-                  <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
-                    <input name="username" placeholder="Username" defaultValue="admin" />
-                    <input name="password" type="password" placeholder="Password" defaultValue="admin" />
-                    <button className="primary" type="submit">Log in</button>
-                  </form>
+              <div className="card section-card">
+                <div className="eyebrow">Staffing operating note</div>
+                <h3>4.5-day productivity normalization</h3>
+                <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that RX/day rate.</p>
+                <div className="micro-metrics">
+                  <MiniMetric label="Weighted operating days in data" value={staffingSummary.totalWeightedOperatingDays} />
+                  <MiniMetric label="RX / day" value={staffingSummary.overallAvgRxPerWeightedDay} />
+                  <MiniMetric label="Open / exposed FTE" value={staffingSummary.totalOpenFte} />
                 </div>
-              ) : (
-                <div className="card section-card">
-                  <div className="eyebrow">Staffing operating note</div>
-                  <h3>4.5-day productivity normalization</h3>
-                  <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that RX/day rate.</p>
-                  <div className="micro-metrics">
-                    <MiniMetric label="Weighted operating days in data" value={staffingSummary.totalWeightedOperatingDays} />
-                    <MiniMetric label="RX / day" value={staffingSummary.overallAvgRxPerWeightedDay} />
-                    <MiniMetric label="Open / exposed FTE" value={staffingSummary.totalOpenFte} />
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="grid pharmacy-card-grid" style={{ marginTop: 18 }}>
@@ -815,6 +933,7 @@ export default function App() {
                 { label: 'Covered FTE', value: staffingSummary.totalFilledFte || 0, type: 'number' },
                 { label: 'Open / exposed FTE', value: staffingSummary.totalOpenFte || 0, type: 'number', tone: (staffingSummary.totalOpenFte || 0) > 0 ? 'warn' : 'good' },
                 { label: 'Pressure pharmacies', value: staffingSummary.pharmaciesWithPressure || 0, type: 'number', tone: (staffingSummary.pharmaciesWithPressure || 0) > 0 ? 'warn' : 'good' },
+                { label: 'Manual entries', value: manualStaffEntries.length, type: 'number' },
               ]}
               actions={[
                 { label: 'Only pressure roles', onClick: () => setReportContext({ section: 'Staffing', flaggedOnly: true }), kind: 'primary' },
@@ -843,8 +962,45 @@ export default function App() {
                 </ul>
               </div>
             </div>
+            <div className="card section-card" style={{ marginTop: 18 }}>
+              <div className="eyebrow">Manual staffing entries</div>
+              <h3>Add staffing profile rows</h3>
+              <p className="section-copy">Add local staffing rows by pharmacy and position (allocated vs covered spots) to supplement the fixed profile when temporary updates are needed.</p>
+              <form onSubmit={addManualStaffEntry} className="form-grid" style={{ marginTop: 12 }}>
+                <select value={manualStaffForm.pharmacyCode} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, pharmacyCode: e.target.value }))}>
+                  {bootstrap.pharmacies.map((pharmacy) => <option key={pharmacy.code} value={pharmacy.code}>{pharmacy.name}</option>)}
+                </select>
+                <input value={manualStaffForm.roleLabel} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, roleLabel: e.target.value }))} placeholder="Position / role (e.g., Technician)" />
+                <input value={manualStaffForm.allocated} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, allocated: e.target.value }))} placeholder="Allocated spots" type="number" min={0} step={0.5} />
+                <input value={manualStaffForm.covered} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, covered: e.target.value }))} placeholder="Covered spots" type="number" min={0} step={0.5} />
+                <input value={manualStaffForm.names} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, names: e.target.value }))} placeholder="Staff names (optional)" />
+                <input value={manualStaffForm.notes} onChange={(e) => setManualStaffForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Notes (optional)" />
+                <button className="primary" type="submit">Add manual row</button>
+              </form>
+              {manualStaffEntries.length > 0 && (
+                <div className="queue-table-wrap" style={{ marginTop: 12 }}>
+                  <table className="queue-table">
+                    <thead>
+                      <tr><th>Pharmacy</th><th>Role</th><th>Allocated</th><th>Covered</th><th>Open</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      {manualStaffEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{bootstrap.pharmacies.find((item) => item.code === entry.pharmacyCode)?.name || entry.pharmacyCode}</td>
+                          <td>{entry.roleLabel}</td>
+                          <td>{entry.allocated}</td>
+                          <td>{entry.covered}</td>
+                          <td>{Math.max(entry.allocated - entry.covered, 0)}</td>
+                          <td><button className="secondary" type="button" onClick={() => removeManualStaffEntry(entry.id)}>Remove</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
             <div style={{ marginTop: 18 }}>
-              <ReportTable title="Staffing by pharmacy and role" description="Allocated positions, named coverage, temporary seats, transitional changes, and capacity pressure are all normalized to uploaded RX/day." rows={staffingRows} columns={staffingColumns} exportName="staffing_profile" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+              <ReportTable title="Staffing by pharmacy and role" description="Allocated positions, named coverage, temporary seats, transitional changes, manual entries, and capacity pressure are normalized to uploaded RX/day." rows={staffingRowsWithManual} columns={staffingColumns} exportName="staffing_profile" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
             </div>
           </>
         )}
@@ -883,6 +1039,7 @@ export default function App() {
             </div>
           </>
         )}
+        </>
       </div>
     </div>
   );

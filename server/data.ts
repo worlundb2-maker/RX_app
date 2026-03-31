@@ -76,13 +76,9 @@ function canUseSqliteCli() {
 
 function canUsePythonSqlite() {
   if (pythonSqliteAvailable != null) return pythonSqliteAvailable;
-  const probe = [
-    'import sqlite3',
-    "print('ok')",
-  ].join('\n');
   try {
-    const out = execFileSync('python3', ['-c', probe], { encoding: 'utf8' }).trim();
-    pythonSqliteAvailable = out === 'ok';
+    execFileSync('python3', ['-c', 'import sqlite3'], { stdio: 'ignore' });
+    pythonSqliteAvailable = true;
   } catch {
     pythonSqliteAvailable = false;
   }

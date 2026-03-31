@@ -6,6 +6,11 @@ Preferred launcher
 3. Double-click Open Pharmacy Analytics.exe.
 4. Browser should open to http://127.0.0.1:5000
 
+If EXE is blocked by Windows security
+1. In the same folder, double-click Open Pharmacy Analytics.bat.
+2. Keep the Command Prompt window open while using the app.
+3. Open http://127.0.0.1:5000 if it does not open automatically.
+
 Direct open bypass if the launcher is blocked or closes
 1. Open the extracted app folder.
 2. Click the address bar, type cmd, and press Enter.

@@ -19,3 +19,5 @@ The launcher will create:
 - `launcher-server.log`
 
 If startup fails, the launcher opens those logs automatically in Notepad.
+
+If Windows blocks the EXE completely, use `Open Pharmacy Analytics.bat` in the same folder as a fallback launcher.
