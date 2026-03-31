@@ -521,7 +521,14 @@ export default function App() {
 
             <div className="grid pharmacy-card-grid" style={{ marginTop: 18 }}>
               {filteredFinanceByPharmacy.map((item: any) => (
-                <PharmacyFinanceCard key={item.pharmacyCode} item={item} staffing={state.staffing?.byPharmacy?.find((site: any) => site.pharmacyCode === item.pharmacyCode)} onClickSdra={() => openReport('SDRA', { flaggedOnly: true, filterText: item.pharmacyName })} onClickStaffing={() => openReport('Staffing', { filterText: item.pharmacyName, flaggedOnly: true })} />
+                <PharmacyFinanceCard
+                  key={item.pharmacyCode}
+                  item={item}
+                  staffing={state.staffing?.byPharmacy?.find((site: any) => site.pharmacyCode === item.pharmacyCode)}
+                  onClickDrilldown={() => openReport('Claims', { filterText: item.pharmacyName })}
+                  onClickSdra={() => openReport('SDRA', { flaggedOnly: true, filterText: item.pharmacyName })}
+                  onClickStaffing={() => openReport('Staffing', { filterText: item.pharmacyName, flaggedOnly: true })}
+                />
               ))}
             </div>
 
@@ -925,10 +932,28 @@ function ActionQueueCard({ title, value, hint, tone = 'neutral', onClick }: { ti
   );
 }
 
-function PharmacyFinanceCard({ item, staffing, onClickSdra, onClickStaffing }: { item:any; staffing:any; onClickSdra:()=>void; onClickStaffing:()=>void }) {
+function PharmacyFinanceCard({ item, staffing, onClickDrilldown, onClickSdra, onClickStaffing }: { item:any; staffing:any; onClickDrilldown:()=>void; onClickSdra:()=>void; onClickStaffing:()=>void }) {
   const color = item.pharmacyColor || pharmacyColorMap[item.pharmacyCode] || '#132238';
+  const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (shouldSkipCardDrilldown(event.target)) return;
+    onClickDrilldown();
+  };
+
   return (
-    <div className="card pharmacy-performance-card" style={{ ['--pharmacyColor' as any]: color }}>
+    <div
+      className="card pharmacy-performance-card clickable-card"
+      style={{ ['--pharmacyColor' as any]: color }}
+      onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClickDrilldown();
+        }
+      }}
+      aria-label={`Open ${item.pharmacyName} claims drilldown`}
+    >
       <div className="pharmacy-performance-head">
         <div>
           <div className="eyebrow">{item.pharmacyName}</div>
@@ -945,12 +970,18 @@ function PharmacyFinanceCard({ item, staffing, onClickSdra, onClickStaffing }: {
         <MetricStack label="Weighted NDC" value={item.weightedNdcSavings || 0} type="currency" />
       </div>
       <div className="small muted" style={{ marginTop: 12 }}>{staffing?.dashboardNote || `${item.flaggedActions || 0} flagged actions are currently attached to this pharmacy.`}</div>
+      <div className="small muted" style={{ marginTop: 6 }}>Click anywhere on this card to open claim-level drilldown for {item.pharmacyName}.</div>
       <div className="row" style={{ marginTop: 14 }}>
         <button className="secondary" onClick={onClickSdra}>Open SDRA issues</button>
         <button className="secondary" onClick={onClickStaffing}>Open staffing</button>
       </div>
     </div>
   );
+}
+
+function shouldSkipCardDrilldown(target: EventTarget | null) {
+  const element = target instanceof HTMLElement ? target : null;
+  return Boolean(element?.closest('button, a, input, select, textarea, [role="button"], [data-no-card-drilldown="true"]'));
 }
 
 function MetricStack({ label, value, type }: { label:string; value:any; type?:ColumnDef['type'] }) {
