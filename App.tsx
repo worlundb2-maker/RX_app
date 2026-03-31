@@ -86,16 +86,16 @@ const uploadTypeLabels: Record<UploadType, string> = {
 };
 
 const sectionColorMap: Record<Section, string> = {
-  Dashboard: '#132238',
+  Dashboard: '#1f2937',
   Uploads: '#334155',
-  SDRA: '#7c2d12',
+  SDRA: '#6b7280',
   Claims: '#0f766e',
-  'Third Party': '#4338ca',
-  Inventory: '#0f766e',
-  NDC: '#14532d',
-  '340B': '#991b1b',
-  Staffing: '#1d4ed8',
-  Users: '#475569',
+  'Third Party': '#0b3b66',
+  Inventory: '#1d4d4f',
+  NDC: '#1f5f4a',
+  '340B': '#7f1d1d',
+  Staffing: '#1e40af',
+  Users: '#4b5563',
 };
 
 export default function App() {
@@ -228,6 +228,12 @@ export default function App() {
     setSection(targetSection);
     setReportContext({ section: targetSection, filterText: options?.filterText ?? '', flaggedOnly: options?.flaggedOnly ?? false });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function logout() {
+    setUser(null);
+    setSection('Dashboard');
+    setMessage('Logged out');
   }
 
   const visibleReportContext = reportContext.section === section ? reportContext : undefined;
@@ -432,16 +438,32 @@ export default function App() {
             <div className="subtitle">Finance-forward pharmacy intelligence with row-level drilldown, manual clear controls, and store-level color identity across Konawa, Monte Vista, Arlington, and Seminole.</div>
           </div>
           <div className="header-actions">
-            <select value={selectedPharmacy} onChange={(e) => setSelectedPharmacy(e.target.value)}>
-              <option value="ALL">All pharmacies</option>
-              {bootstrap.pharmacies.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-            </select>
-            <div className="status-chip">
-              {user ? `${user.displayName} (${user.role})` : `Default login: ${bootstrap.defaultLogin.username}/${bootstrap.defaultLogin.password}`}
-            </div>
+            {user && (
+              <select value={selectedPharmacy} onChange={(e) => setSelectedPharmacy(e.target.value)}>
+                <option value="ALL">All pharmacies</option>
+                {bootstrap.pharmacies.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            )}
+            <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
+            {user && <button className="secondary" type="button" onClick={logout}>Log out</button>}
           </div>
         </header>
 
+        {message && <div className="message-banner card">{message}</div>}
+
+        {!user ? (
+          <div className="card section-card" style={{ maxWidth: 460, margin: '20px auto' }}>
+            <div className="eyebrow">Authentication required</div>
+            <h3>Log in to continue</h3>
+            <p className="section-copy">Enter your assigned local credentials to access the dashboard.</p>
+            <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
+              <input name="username" placeholder="Username" autoComplete="username" />
+              <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
+              <button className="primary" type="submit">Log in</button>
+            </form>
+          </div>
+        ) : (
+          <>
         <div className="tabs card">
           {sections.map((s) => (
             <button key={s} className={`tab ${section === s ? 'active' : ''}`} style={section === s ? { borderColor: sectionColorMap[s], background: `${sectionColorMap[s]}14`, color: sectionColorMap[s] } : undefined} onClick={() => setSection(s)}>
@@ -449,8 +471,6 @@ export default function App() {
             </button>
           ))}
         </div>
-
-        {message && <div className="message-banner card">{message}</div>}
 
         {section === 'Dashboard' && (
           <>
@@ -495,28 +515,16 @@ export default function App() {
                   <ActionQueueCard title="Upload integrity" value={state.uploads.length} hint="Manual clear remains available on every dataset" tone="neutral" onClick={() => openReport('Uploads')} />
                 </div>
               </div>
-              {!user ? (
-                <div className="card section-card">
-                  <div className="eyebrow">Authentication</div>
-                  <h3>Log in</h3>
-                  <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
-                    <input name="username" placeholder="Username" defaultValue="admin" />
-                    <input name="password" type="password" placeholder="Password" defaultValue="admin" />
-                    <button className="primary" type="submit">Log in</button>
-                  </form>
+              <div className="card section-card">
+                <div className="eyebrow">Staffing operating note</div>
+                <h3>4.5-day productivity normalization</h3>
+                <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that RX/day rate.</p>
+                <div className="micro-metrics">
+                  <MiniMetric label="Weighted operating days in data" value={staffingSummary.totalWeightedOperatingDays} />
+                  <MiniMetric label="RX / day" value={staffingSummary.overallAvgRxPerWeightedDay} />
+                  <MiniMetric label="Open / exposed FTE" value={staffingSummary.totalOpenFte} />
                 </div>
-              ) : (
-                <div className="card section-card">
-                  <div className="eyebrow">Staffing operating note</div>
-                  <h3>4.5-day productivity normalization</h3>
-                  <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that RX/day rate.</p>
-                  <div className="micro-metrics">
-                    <MiniMetric label="Weighted operating days in data" value={staffingSummary.totalWeightedOperatingDays} />
-                    <MiniMetric label="RX / day" value={staffingSummary.overallAvgRxPerWeightedDay} />
-                    <MiniMetric label="Open / exposed FTE" value={staffingSummary.totalOpenFte} />
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="grid pharmacy-card-grid" style={{ marginTop: 18 }}>
@@ -889,6 +897,8 @@ export default function App() {
               </div>
               <ReportTable title="Current users" description="Local users stay inside the app_data database and can be refreshed or backed up with the rest of the application data." rows={state.users} columns={userColumns} exportName="users" groupByPharmacy={false} allowDrilldown={false} />
             </div>
+          </>
+        )}
           </>
         )}
       </div>

@@ -8,9 +8,8 @@
     "build": "vite build",
     "start": "tsx server/index.ts --production",
     "check": "tsc --noEmit",
-    "desktop:dev": "electron .",
-    "desktop:pack:win": "npm run build && electron-builder --win portable",
-    "test:desktop": "node --test test/desktop-main.test.mjs"
+    "test:regression": "node --test --import tsx server/regression.test.ts",
+    "release:gate": "npm run check && npm run test:regression && npm run build"
   },
   "dependencies": {
     "express": "^5.1.0",
