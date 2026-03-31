@@ -14,11 +14,8 @@
   "dependencies": {
     "express": "^5.1.0",
     "multer": "^2.0.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "vite": "^7.1.3",
-    "wouter": "^3.3.5",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "tsx": "^4.20.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
@@ -27,7 +24,36 @@
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.0.0",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.12",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^7.1.3",
+    "wouter": "^3.3.5"
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "com.local.pharmacy.analytics",
+    "productName": "Pharmacy Analytics",
+    "files": [
+      "desktop/**/*",
+      "dist/**/*",
+      "server/**/*",
+      "index.html",
+      "vite.config.ts",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.cjs"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
   }
 }
