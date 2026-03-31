@@ -246,11 +246,20 @@ function normalizeClaimLifecycle(claimTypeValue: any, currentStatusValue: any): 
   return currentStatus ? 'other_inactive' : 'active';
 }
 
-function pioneerClaimKey(claim: Pick<PioneerClaim, 'pharmacyCode' | 'rxNumber' | 'fillNumber' | 'ndc'>) {
-  return [claim.pharmacyCode, claim.rxNumber, claim.fillNumber, cleanNdc(claim.ndc)].join('|');
+function pioneerClaimKey(claim: Pick<PioneerClaim, 'pharmacyCode' | 'rxNumber' | 'fillNumber' | 'ndc' | 'fillDate' | 'claimDate' | 'claimStatus' | 'currentTransactionStatus'>) {
+  return [
+    claim.pharmacyCode,
+    claim.rxNumber,
+    claim.fillNumber,
+    cleanNdc(claim.ndc),
+    claim.fillDate || '',
+    claim.claimDate || '',
+    asText(claim.claimStatus).toUpperCase(),
+    asText(claim.currentTransactionStatus).toLowerCase(),
+  ].join('|');
 }
 
-function mtfClaimKey(claim: Pick<MtfClaim, 'sourceType' | 'pharmacyCode' | 'rxNumber' | 'fillNumber' | 'ndc' | 'icn' | 'receiptDate' | 'rawPaymentAmount'>) {
+function mtfClaimKey(claim: Pick<MtfClaim, 'sourceType' | 'pharmacyCode' | 'rxNumber' | 'fillNumber' | 'ndc' | 'icn' | 'serviceDate' | 'receiptDate' | 'rawPaymentAmount'>) {
   return [
     claim.sourceType,
     claim.pharmacyCode,
@@ -258,6 +267,7 @@ function mtfClaimKey(claim: Pick<MtfClaim, 'sourceType' | 'pharmacyCode' | 'rxNu
     claim.fillNumber,
     cleanNdc(claim.ndc),
     claim.icn || '',
+    claim.serviceDate || '',
     claim.receiptDate || '',
     claim.rawPaymentAmount ?? '',
   ].join('|');
