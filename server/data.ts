@@ -20,6 +20,7 @@ const APP_STATE_ROW_ID = 1;
 const SQLITE_SCHEMA_VERSION = 6;
 let sqliteCliAvailable: boolean | null = null;
 let pythonSqliteAvailable: boolean | null = null;
+let pythonSqliteCmd: string | null = null;
 const ENTITY_TABLES = [
   { table: 'users', path: 'users' },
   { table: 'uploads', path: 'uploads' },
@@ -80,16 +81,28 @@ function canUsePythonSqlite() {
     'import sqlite3',
     "print('ok')",
   ].join('\n');
-  try {
-    const out = execFileSync('python3', ['-c', probe], { encoding: 'utf8' }).trim();
-    pythonSqliteAvailable = out === 'ok';
-  } catch {
-    pythonSqliteAvailable = false;
+  for (const cmd of ['python3', 'python']) {
+    try {
+      const out = execFileSync(cmd, ['-c', probe], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (out === 'ok') {
+        pythonSqliteCmd = cmd;
+        pythonSqliteAvailable = true;
+        return true;
+      }
+    } catch {
+      // continue checking python command candidates
+    }
   }
+  pythonSqliteCmd = null;
+  pythonSqliteAvailable = false;
   return pythonSqliteAvailable;
 }
 
 function runSqlWithPython(sql: string): string {
+  const pythonCmd = pythonSqliteCmd || 'python3';
   const script = [
     'import sqlite3, sys',
     'db_file = sys.argv[1]',
@@ -107,7 +120,7 @@ function runSqlWithPython(sql: string): string {
     'conn.close()',
     'sys.stdout.write(out)',
   ].join('\n');
-  return execFileSync('python3', ['-c', script, sqliteFile, sql], { encoding: 'utf8' });
+  return execFileSync(pythonCmd, ['-c', script, sqliteFile, sql], { encoding: 'utf8' });
 }
 
 function runSql(sql: string): string {
