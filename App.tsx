@@ -390,7 +390,7 @@ export default function App() {
     { key: 'pharmacyName', label: 'Pharmacy' },
     { key: 'roleLabel', label: 'Role' },
     { key: 'rxRange', label: 'RX Range' },
-    { key: 'avgRxPerWeightedDay', label: 'RX / Day', type: 'number' },
+    { key: 'avgRxPerWeightedDay', label: 'RX/day', type: 'number' },
     { key: 'weightedOperatingDays', label: 'Weighted Days', type: 'number' },
     { key: 'allocated', label: 'Allocated', type: 'number' },
     { key: 'availableCoverage', label: 'Covered', type: 'number' },
@@ -457,7 +457,7 @@ export default function App() {
               <div>
                 <div className="eyebrow">Executive overview</div>
                 <h2>Financial control, compliance exposure, staffing pressure, and store action queues</h2>
-                <p>The dashboard is centered on modeled revenue, estimated acquisition, SDRA collectible gap, improper 340B payment exposure, inventory capital, and staffing capacity normalized to a 4.5-day operating week.</p>
+                <p>The dashboard is centered on modeled revenue, estimated acquisition, SDRA collectible gap, improper 340B payment exposure, inventory capital, and staffing capacity normalized to a 4.5-day operating week (Mon-Thu = 1.0 day each, Fri = 0.5 day).</p>
               </div>
               <div className="hero-points">
                 {topFindings.map((item) => <div key={item} className="hero-point">{item}</div>)}
@@ -508,10 +508,10 @@ export default function App() {
                 <div className="card section-card">
                   <div className="eyebrow">Staffing operating note</div>
                   <h3>4.5-day productivity normalization</h3>
-                  <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that RX/day rate.</p>
+                  <p>Monday through Thursday count as 1.0 operating day and Friday counts as 0.5. RX/day is calculated from total observed claims divided by those weighted operating days, and staffing pressure is derived from that same RX/day rate.</p>
                   <div className="micro-metrics">
                     <MiniMetric label="Weighted operating days in data" value={staffingSummary.totalWeightedOperatingDays} />
-                    <MiniMetric label="RX / day" value={staffingSummary.overallAvgRxPerWeightedDay} />
+                    <MiniMetric label="RX/day" value={staffingSummary.overallAvgRxPerWeightedDay} />
                     <MiniMetric label="Open / exposed FTE" value={staffingSummary.totalOpenFte} />
                   </div>
                 </div>
@@ -806,15 +806,15 @@ export default function App() {
           <>
             <SectionOverview
               title="Staffing profile and workload capacity"
-              subtitle="Use the provided staffing profile, shared-seat rules, and a 4.5-day operating week to compare current coverage against observed RX/day demand and role-specific capacity ranges." 
+              subtitle="Use the provided staffing profile, shared-seat rules, and the 4.5-day operating standard (Mon-Thu = 1.0, Fri = 0.5) to compare current coverage against observed RX/day demand and role-specific capacity ranges." 
               color={sectionColorMap.Staffing}
               metrics={[
                 { label: 'Observed RX', value: staffingSummary.totalObservedRx || 0, type: 'number' },
-                { label: 'RX / day', value: staffingSummary.overallAvgRxPerWeightedDay || 0, type: 'number' },
+                { label: 'RX/day', value: staffingSummary.overallAvgRxPerWeightedDay || 0, type: 'number' },
                 { label: 'Allocated FTE', value: staffingSummary.totalAllocatedFte || 0, type: 'number' },
                 { label: 'Covered FTE', value: staffingSummary.totalFilledFte || 0, type: 'number' },
                 { label: 'Open / exposed FTE', value: staffingSummary.totalOpenFte || 0, type: 'number', tone: (staffingSummary.totalOpenFte || 0) > 0 ? 'warn' : 'good' },
-                { label: 'Pressure pharmacies', value: staffingSummary.pharmaciesWithPressure || 0, type: 'number', tone: (staffingSummary.pharmaciesWithPressure || 0) > 0 ? 'warn' : 'good' },
+                { label: 'RX/day pressure pharmacies', value: staffingSummary.pharmaciesWithPressure || 0, type: 'number', tone: (staffingSummary.pharmaciesWithPressure || 0) > 0 ? 'warn' : 'good' },
               ]}
               actions={[
                 { label: 'Only pressure roles', onClick: () => setReportContext({ section: 'Staffing', flaggedOnly: true }), kind: 'primary' },

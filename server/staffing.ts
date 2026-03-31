@@ -215,13 +215,49 @@ function money(value: number) {
   return Number(value.toFixed(2));
 }
 
-function operatingDayWeight(dateValue: string | null | undefined) {
-  if (!dateValue) return 0;
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return 0;
-  const weekday = date.getUTCDay();
+function weekdayFromDateParts(year: number, month: number, day: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (year < 1900 || year > 3000) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.getUTCDay();
+}
+
+function weekdayWeight(weekday: number | null) {
+  if (weekday == null) return 0;
   if (weekday >= 1 && weekday <= 4) return 1;
   if (weekday === 5) return 0.5;
+  return 0;
+}
+
+function operatingDayWeight(dateValue: string | null | undefined) {
+  if (!dateValue) return 0;
+  const normalized = String(dateValue).trim();
+  if (!normalized) return 0;
+
+  // Parse date-only values explicitly to avoid timezone shifts.
+  const isoDateMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1]);
+    const month = Number(isoDateMatch[2]);
+    const day = Number(isoDateMatch[3]);
+    return weekdayWeight(weekdayFromDateParts(year, month, day));
+  }
+
+  // Support common US date format exports (MM/DD/YYYY).
+  const usDateMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usDateMatch) {
+    const month = Number(usDateMatch[1]);
+    const day = Number(usDateMatch[2]);
+    const year = Number(usDateMatch[3]);
+    return weekdayWeight(weekdayFromDateParts(year, month, day));
+  }
+
+  // Unknown date format intentionally resolves to no weighted day so ambiguous parsing cannot skew staffing rates.
   return 0;
 }
 
@@ -258,11 +294,15 @@ function staffingNeed(avgRxPerWeightedDay: number, role: StaffingRoleKey) {
 }
 
 export function buildStaffingState(pioneerClaims: PioneerClaim[]) {
+  const rawWeightedOperatingByPharmacy: number[] = [];
   const perPharmacy = STAFFING_PROFILE.map((profile) => {
     const claims = pioneerClaims.filter((claim) => claim.pharmacyCode === profile.pharmacyCode);
     const operatingDates = [...new Set(claims.map((claim) => claim.fillDate || claim.claimDate).filter(Boolean) as string[])];
-    const weightedOperatingDays = round(operatingDates.reduce((sum, date) => sum + operatingDayWeight(date), 0));
-    const avgRxPerWeightedDay = weightedOperatingDays > 0 ? round(claims.length / weightedOperatingDays) : claims.length;
+    const rawWeightedOperatingDays = operatingDates.reduce((sum, date) => sum + operatingDayWeight(date), 0);
+    rawWeightedOperatingByPharmacy.push(rawWeightedOperatingDays);
+    const weightedOperatingDays = round(rawWeightedOperatingDays);
+    const rawAvgRxPerWeightedDay = rawWeightedOperatingDays > 0 ? claims.length / rawWeightedOperatingDays : claims.length;
+    const avgRxPerWeightedDay = round(rawAvgRxPerWeightedDay);
     const medDClaims = claims.filter((claim) => claim.payerType === 'Med D').length;
 
     const roleRows = profile.roles
@@ -275,7 +315,7 @@ export function buildStaffingState(pioneerClaims: PioneerClaim[]) {
         const shared = role.shared ?? 0;
         const availableCoverage = round(role.currentFilled + temporary + transitioningIn + shared - transitioningOut, 1);
         const openPositions = Math.max(round(role.allocated - availableCoverage, 1), 0);
-        const needs = staffingNeed(avgRxPerWeightedDay, role.key);
+        const needs = staffingNeed(rawAvgRxPerWeightedDay, role.key);
         const status = capacityStatus(availableCoverage, needs.stretchNeed, needs.preferredNeed);
         return {
           ...role,
@@ -329,7 +369,8 @@ export function buildStaffingState(pioneerClaims: PioneerClaim[]) {
   });
 
   const overallObservedRx = perPharmacy.reduce((sum, item) => sum + item.observedRx, 0);
-  const overallWeightedDays = round(perPharmacy.reduce((sum, item) => sum + item.weightedOperatingDays, 0));
+  const overallWeightedDaysRaw = rawWeightedOperatingByPharmacy.reduce((sum, value) => sum + value, 0);
+  const overallWeightedDays = round(overallWeightedDaysRaw);
   const overallAvgRxPerWeightedDay = overallWeightedDays > 0 ? round(overallObservedRx / overallWeightedDays) : overallObservedRx;
 
   return {
