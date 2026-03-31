@@ -194,6 +194,26 @@ function isLikelyPackagedInjectableClaim(
   return quantity <= 12;
 }
 
+function isLikelyStockSizeCycleClaim(
+  claim: PioneerClaim,
+  stockSizeMap: ReturnType<typeof buildStockSizeMap>,
+) {
+  const quantity = Number(claim.quantity || 0);
+  const daysSupply = Number(claim.daysSupply || 0);
+  if (!quantity || !daysSupply || !isCommonPackageDaysSupply(daysSupply)) return false;
+
+  const stockSize = stockSizeMap.exact.get(`${claim.pharmacyCode}|${cleanNdc(claim.ndc)}`)
+    ?? stockSizeMap.anyGroup.get(`${claim.pharmacyCode}|${cleanNdc(claim.ndc)}`)
+    ?? 0;
+  if (stockSize <= 0) return false;
+
+  const multiplier = quantity / stockSize;
+  const roundedMultiplier = Math.round(multiplier);
+  if (roundedMultiplier >= 1 && roundedMultiplier <= 4 && Math.abs(multiplier - roundedMultiplier) <= 0.05) return true;
+  if (Math.abs(multiplier - 0.5) <= 0.05 || Math.abs(multiplier - 1.5) <= 0.05 || Math.abs(multiplier - 2.5) <= 0.05) return true;
+  return false;
+}
+
 function hasAtypicalDaySupply(
   claim: PioneerClaim,
   stockSizeMap: ReturnType<typeof buildStockSizeMap>,
@@ -206,6 +226,7 @@ function hasAtypicalDaySupply(
   if (isVariableDosePackageClaim(claim, stockSizeMap, inventoryReferenceMap)) return false;
   const unitsPerDay = quantity / daysSupply;
   if (unitsPerDay < 0.35 && isLikelyPackagedInjectableClaim(claim, stockSizeMap, inventoryReferenceMap)) return false;
+  if (unitsPerDay < 0.35 && isLikelyStockSizeCycleClaim(claim, stockSizeMap)) return false;
   if (isPackageSensitiveDaySupplyClaim(claim, inventoryReferenceMap) && unitsPerDay < 0.35 && isCommonPackageDaysSupply(daysSupply)) return false;
   return unitsPerDay < 0.35 || unitsPerDay > 4.5;
 }
