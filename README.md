@@ -17,9 +17,6 @@ This package is prepared for local Windows use.
 Runtime data is stored in the current Windows user profile under:
 - `%APPDATA%\Pharmacy Analytics\local-data`
 
-## Build a Windows executable (maintainers)
-```bash
-npm install
-npm run desktop:pack:win
-```
-The executable is generated under `release/`.
+If startup fails, the launcher opens those logs automatically in Notepad.
+
+If Windows blocks the EXE completely, use `Open Pharmacy Analytics.bat` in the same folder as a fallback launcher.
