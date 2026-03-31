@@ -57,19 +57,33 @@ function countLifecycle(claims: PioneerClaim[], lifecycle: PioneerClaim['normali
   return claims.filter((claim) => claim.normalizedClaimLifecycle === lifecycle).length;
 }
 
-const MEDICAID_PLAN_NAMES = [
-  'ohca',
-  'oklahoma health care authority',
+const MEDICAID_CONTEXT_MARKERS = ['medicaid', 'soonercare', 'welfare', 'ohca', 'oklahoma health care authority'] as const;
+const MEDICAID_MCO_EXACT_MARKERS = [
   'aetna better health of oklahoma medicaid mco',
   'oklahoma complete health (centene) medicaid mco 2hfa',
-  'humana health horizons ok medicaid mco 1a791',
-  'soonercare',
-  'medicaid'
-];
+  'humana health horizons ok medicaid mco 1a791'
+] as const;
+const MEDICAID_MCO_SHORT_MARKERS = [
+  'aetna better health of oklahoma',
+  'oklahoma complete health (centene)',
+  'oklahoma complete health',
+  'humana health horizons ok'
+] as const;
+
+function normalizeMedicaidText(value: string | null | undefined) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 function includesMedicaidMarker(value: string | null | undefined) {
-  const text = String(value || '').toLowerCase();
-  return MEDICAID_PLAN_NAMES.some((marker) => text.includes(marker)) || /medicaid|soonercare|welfare/.test(text);
+  const text = normalizeMedicaidText(value);
+  if (!text) return false;
+
+  if (MEDICAID_CONTEXT_MARKERS.some((marker) => text.includes(marker))) return true;
+  if (MEDICAID_MCO_EXACT_MARKERS.some((marker) => text.includes(normalizeMedicaidText(marker)))) return true;
+
+  const hasShortMcoName = MEDICAID_MCO_SHORT_MARKERS.some((marker) => text.includes(normalizeMedicaidText(marker)));
+  const hasMedicaidContext = /\b(medicaid|mco|soonercare|ohca|oklahoma health care authority)\b/.test(text);
+  return hasShortMcoName && hasMedicaidContext;
 }
 
 function isMedicaidClaim(claim: PioneerClaim) {
@@ -990,8 +1004,8 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     const prescriberCategory = (claim.prescriberCategory || '').toLowerCase();
     const diabeticSupply = /test strip|lancet|sensor|meter|cgms|dexcom|freestyle|pen needle|needle/i.test(claim.drugName);
     const medicaidClaim = isMedicaidClaim(claim);
-    const is340BEligible = /340b referral|340b/i.test(prescriberCategory);
     const isReferral = /340b referral/i.test(prescriberCategory);
+    const isConfirmed340BEligible = /(^|\b)340b(\b|$)/i.test(prescriberCategory) && !isReferral;
     let finding: string | null = null;
     let severity: 'high' | 'medium' | 'low' = 'low';
     let flagged = true;
@@ -999,14 +1013,14 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     if (medicaidClaim && claim.inventoryGroup === '340B') {
       finding = 'Medicaid plan dispensed from 340B inventory';
       severity = 'high';
-    } else if (claim.inventoryGroup === '340B' && !is340BEligible) {
+    } else if (claim.inventoryGroup === '340B' && !isConfirmed340BEligible && !isReferral) {
       finding = '340B inventory used without 340B-eligible prescriber';
       severity = 'high';
     } else if (claim.inventoryGroup === '340B' && isReferral) {
       finding = '340B referral verification queue';
       severity = 'low';
       flagged = false;
-    } else if (claim.inventoryGroup === 'RX' && is340BEligible && !diabeticSupply && !medicaidClaim) {
+    } else if (claim.inventoryGroup === 'RX' && isConfirmed340BEligible && !diabeticSupply && !medicaidClaim) {
       finding = 'RX inventory used for 340B-eligible prescriber';
       severity = 'medium';
     }

@@ -272,16 +272,40 @@ function inventoryGroup(value: any): InventoryGroup {
   return String(value ?? '').toUpperCase().includes('340') ? '340B' : 'RX';
 }
 
+function normalizeMedicaidText(value: string | null | undefined): string {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const MEDICAID_CONTEXT_MARKERS = ['medicaid', 'soonercare', 'welfare', 'ohca', 'oklahoma health care authority'] as const;
+const MEDICAID_MCO_EXACT_MARKERS = [
+  'aetna better health of oklahoma medicaid mco',
+  'oklahoma complete health (centene) medicaid mco 2hfa',
+  'humana health horizons ok medicaid mco 1a791'
+] as const;
+const MEDICAID_MCO_SHORT_MARKERS = [
+  'aetna better health of oklahoma',
+  'oklahoma complete health (centene)',
+  'oklahoma complete health',
+  'humana health horizons ok'
+] as const;
+
+function isMedicaidNameMatch(...names: string[]): boolean {
+  const combined = normalizeMedicaidText(names.join(' '));
+  if (!combined) return false;
+
+  if (MEDICAID_CONTEXT_MARKERS.some((marker) => combined.includes(marker))) return true;
+  if (MEDICAID_MCO_EXACT_MARKERS.some((marker) => combined.includes(normalizeMedicaidText(marker)))) return true;
+
+  const hasShortMcoName = MEDICAID_MCO_SHORT_MARKERS.some((marker) => combined.includes(normalizeMedicaidText(marker)));
+  const hasMedicaidContext = /\b(medicaid|mco|soonercare|ohca|oklahoma health care authority)\b/.test(combined);
+  return hasShortMcoName && hasMedicaidContext;
+}
+
 function payerTypeFromNames(...names: string[]): PioneerClaim['payerType'] {
   const combined = names.join(' ').toLowerCase();
   if (!combined) return 'Other';
   if (combined.includes('cash') || combined.includes('self-pay') || combined.includes('rx cash')) return 'Cash';
-  if (
-    combined.includes('medicaid') || combined.includes('soonercare') || combined.includes('welfare') || combined.includes('ohca')
-    || combined.includes('aetna better health of oklahoma medicaid mco')
-    || combined.includes('oklahoma complete health (centene) medicaid mco 2hfa')
-    || combined.includes('humana health horizons ok medicaid mco 1a791')
-  ) return 'Medicaid';
+  if (isMedicaidNameMatch(...names)) return 'Medicaid';
   if (combined.includes('pdp') || combined.includes('med d') || combined.includes('part d') || combined.includes('mapd') || combined.includes('medicare')) return 'Med D';
   if (combined.includes('commercial') || combined.includes('standard') || combined.includes('coupon') || combined.includes('340b')) return 'Commercial';
   return 'Commercial';
