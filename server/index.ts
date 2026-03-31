@@ -26,7 +26,7 @@ async function mountVite() {
   app.use(vite.middlewares);
   app.use(async (req, res, next) => {
     try {
-      const file = await fs.readFile(path.resolve(process.cwd(), 'client', 'index.html'), 'utf8');
+      const file = await fs.readFile(path.resolve(process.cwd(), 'index.html'), 'utf8');
       const html = await vite.transformIndexHtml(req.originalUrl, file);
       res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
     } catch (error) {
