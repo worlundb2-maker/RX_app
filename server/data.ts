@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import type { AppDb, PharmacyCode, PharmacyConfig, ReviewLabel, UploadRecord, UploadType, UserRecord } from './types';
+import { getAppDataDir } from './paths';
 
 export const PHARMACIES: PharmacyConfig[] = [
   { code: 'KONAWA', name: 'Konawa', color: '#eab308', npi: '1003998980', ncpdp: '3723548', aliases: { storeNumbers: ['1'], names: ['konawa', 'the pharmacy @ cofmc 1', 'the pharmacy @ cofmc 1 - konawa'] } },
@@ -11,9 +12,10 @@ export const PHARMACIES: PharmacyConfig[] = [
   { code: 'SEMINOLE', name: 'Seminole', color: '#16a34a', npi: '1205540101', ncpdp: '3731937', aliases: { storeNumbers: ['4'], names: ['seminole', 'the pharmacy @ cofmc 4', 'the pharmacy @ cofmc 4 - seminole'] } }
 ];
 
-const appDir = path.resolve(process.cwd(), 'app_data');
-const uploadsDir = path.resolve(process.cwd(), 'uploads');
-export const ingestInboxDir = path.resolve(process.cwd(), 'ingest_inbox');
+const storageRoot = getAppDataDir();
+const appDir = path.resolve(storageRoot, 'app_data');
+const uploadsDir = path.resolve(storageRoot, 'uploads');
+export const ingestInboxDir = path.resolve(storageRoot, 'ingest_inbox');
 const sqliteFile = path.join(appDir, 'db.sqlite');
 const legacyJsonFile = path.join(appDir, 'db.json');
 const APP_STATE_ROW_ID = 1;
