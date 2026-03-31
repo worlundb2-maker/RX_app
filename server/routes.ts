@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { addUser, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
 import { ingestUpload } from './parser';
 import { getAppState } from './analysis';
@@ -74,8 +75,21 @@ function parseInboxAssignment(fileName: string): { type: UploadType; pharmacyCod
   if (!type) return null;
   if (type === 'price_rx' || type === 'price_340b') return { type };
 
-  const pharmacyCode = resolveInboxPharmacy(tokens[0] || '');
-  return pharmacyCode ? { type, pharmacyCode } : null;
+  const pharmacyMatches = detectInboxPharmacyMatches(tokens);
+  if (pharmacyMatches.length !== 1) return null;
+  return { type, pharmacyCode: pharmacyMatches[0] };
+}
+
+function detectInboxPharmacyMatches(tokens: string[]): PharmacyCode[] {
+  const set = new Set(tokens.map((token) => token.trim().toLowerCase()).filter(Boolean));
+  const matches = new Set<PharmacyCode>();
+
+  if (set.has('mv') || set.has('montevista') || (set.has('monte') && set.has('vista'))) matches.add('MONTE_VISTA');
+  if (set.has('arlington')) matches.add('ARLINGTON');
+  if (set.has('konawa')) matches.add('KONAWA');
+  if (set.has('seminole')) matches.add('SEMINOLE');
+
+  return [...matches];
 }
 
 function scanInbox() {
@@ -100,7 +114,7 @@ function scanInbox() {
     const storedPath = path.join(uploadDir, storedName);
 
     try {
-      fs.renameSync(sourcePath, storedPath);
+      moveFile(sourcePath, storedPath);
       const result = ingestUpload(storedPath, assignment.type, assignment.pharmacyCode);
       saveUpload(
         { originalname: originalName, filename: storedName } as Express.Multer.File,
@@ -122,7 +136,7 @@ function scanInbox() {
       });
     } catch (error: any) {
       if (fs.existsSync(storedPath) && !fs.existsSync(sourcePath)) {
-        fs.renameSync(storedPath, sourcePath);
+        moveFile(storedPath, sourcePath);
       }
       rejected.push({ file: originalName, reason: error?.message || 'Inbox import failed' });
     }
@@ -135,6 +149,81 @@ function scanInbox() {
     rejectedCount: rejected.length,
     imported,
     rejected,
+  };
+}
+
+function moveFile(sourcePath: string, destinationPath: string) {
+  try {
+    fs.renameSync(sourcePath, destinationPath);
+  } catch (error: any) {
+    if (error?.code !== 'EXDEV') throw error;
+    fs.copyFileSync(sourcePath, destinationPath);
+    fs.unlinkSync(sourcePath);
+  }
+}
+
+async function pullInboxFromSftp(input: {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  remoteDir: string;
+}) {
+  const downloaded: string[] = [];
+  fs.mkdirSync(ingestInboxDir, { recursive: true });
+
+  const credentials = `${input.username}:${input.password}`;
+  const normalizeRemoteDir = (input.remoteDir || '.').replace(/\\/g, '/').replace(/\/+$/, '');
+  const encodeRemotePath = (remotePath: string) => remotePath.split('/').map((segment) => encodeURIComponent(segment)).join('/');
+  const basePath = normalizeRemoteDir === '.' ? '' : normalizeRemoteDir;
+  const listUrl = `sftp://${input.host}:${input.port}/${encodeRemotePath(basePath)}`;
+
+  const listing = execFileSync('curl', [
+    '--silent',
+    '--show-error',
+    '--fail',
+    '--list-only',
+    '--user',
+    credentials,
+    listUrl,
+  ], { encoding: 'utf8' });
+
+  const remoteFiles = listing.split(/\r?\n/g).map((line) => line.trim()).filter(Boolean);
+  for (const remoteNameRaw of remoteFiles) {
+    const remoteName = path.basename(remoteNameRaw).trim();
+    if (!remoteName || remoteName.endsWith('/')) continue;
+    const ext = path.extname(remoteName).toLowerCase();
+    if (!['.xlsx', '.xls', '.csv'].includes(ext)) continue;
+
+    let localName = remoteName;
+    let index = 1;
+    while (fs.existsSync(path.join(ingestInboxDir, localName))) {
+      const parsed = path.parse(remoteName);
+      localName = `${parsed.name}_${index}${parsed.ext}`;
+      index += 1;
+    }
+
+    const localPath = path.join(ingestInboxDir, localName);
+    const remotePath = [basePath, remoteNameRaw].filter(Boolean).join('/');
+    const remoteUrl = `sftp://${input.host}:${input.port}/${encodeRemotePath(remotePath)}`;
+    execFileSync('curl', [
+      '--silent',
+      '--show-error',
+      '--fail',
+      '--user',
+      credentials,
+      '--output',
+      localPath,
+      remoteUrl,
+    ], { encoding: 'utf8' });
+    downloaded.push(localName);
+  }
+
+  const scanResult = scanInbox();
+  return {
+    downloadedCount: downloaded.length,
+    downloaded,
+    ...scanResult,
   };
 }
 
@@ -181,6 +270,9 @@ export function registerRoutes(app: express.Express) {
       saveUpload(req.file, type, pharmacyCode || 'ALL', result.impactedPharmacies, result.rows, result.sourceRows, result.rejectedRows, result.sheetName);
       res.json({ ok: true, ...result });
     } catch (error: any) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
       res.status(400).json({ message: error?.message || 'Upload failed' });
     }
   });
@@ -190,6 +282,24 @@ export function registerRoutes(app: express.Express) {
       res.json({ ok: true, ...scanInbox() });
     } catch (error: any) {
       res.status(400).json({ message: error?.message || 'Inbox scan failed' });
+    }
+  });
+
+  app.post('/api/inbox/sftp-import', express.json(), async (req, res) => {
+    try {
+      const host = typeof req.body?.host === 'string' ? req.body.host.trim() : '';
+      const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+      const password = typeof req.body?.password === 'string' ? req.body.password : '';
+      const remoteDir = typeof req.body?.remoteDir === 'string' && req.body.remoteDir.trim() ? req.body.remoteDir.trim() : '.';
+      const requestedPort = Number(req.body?.port);
+      const port = Number.isFinite(requestedPort) && requestedPort > 0 ? requestedPort : 22;
+      if (!host || !username || !password) {
+        return res.status(400).json({ message: 'host, username, and password are required for SFTP import' });
+      }
+      const result = await pullInboxFromSftp({ host, port, username, password, remoteDir });
+      res.json({ ok: true, ...result });
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || 'SFTP import failed' });
     }
   });
 
