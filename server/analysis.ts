@@ -31,6 +31,27 @@ function sum(values: number[]) {
   return values.reduce((s, value) => s + value, 0);
 }
 
+function denseRank<T>(rows: T[], getValue: (row: T) => number | null | undefined, descending = true) {
+  const rankedRows = rows
+    .map((row) => ({ row, value: getValue(row) }))
+    .filter((entry) => entry.value != null && Number.isFinite(entry.value as number))
+    .sort((a, b) => descending
+      ? Number(b.value) - Number(a.value)
+      : Number(a.value) - Number(b.value));
+  const rankMap = new Map<T, number>();
+  let rank = 0;
+  let lastValue: number | null = null;
+  for (const entry of rankedRows) {
+    const currentValue = Number(entry.value);
+    if (lastValue == null || Math.abs(currentValue - lastValue) > 0.0001) {
+      rank += 1;
+      lastValue = currentValue;
+    }
+    rankMap.set(entry.row, rank);
+  }
+  return rankMap;
+}
+
 function money(value: number) {
   return Number(value.toFixed(2));
 }
@@ -756,7 +777,7 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
 
   const thirdPartyClaims = pioneerClaims.filter((claim) => payerDisplayName(claim) !== 'Unknown' || claim.payerType === 'Cash');
   const payerGroups = Object.entries(groupBy(thirdPartyClaims, (claim) => `${claim.pharmacyCode}|${payerDisplayName(claim)}`));
-  const thirdPartyRaw = payerGroups.map(([groupKey, claims]) => {
+  const thirdPartyBase = payerGroups.map(([groupKey, claims]) => {
     const first = claims[0];
     const payer = payerDisplayName(first);
     const remitValues = claims.flatMap((claim) => {
@@ -817,7 +838,24 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
         ])
       }
     };
-  }).sort((a, b) => Number(b.flagged) - Number(a.flagged) || (a.grossProfitPerRx ?? Infinity) - (b.grossProfitPerRx ?? Infinity) || b.totalClaims - a.totalClaims);
+  });
+  const remitRankMap = denseRank(thirdPartyBase, (row) => row.avgRemitPerRx, true);
+  const grossProfitRankMap = denseRank(thirdPartyBase, (row) => row.grossProfitPerRx, true);
+  const unrankedRemitPosition = remitRankMap.size + 1;
+  const unrankedGrossProfitPosition = grossProfitRankMap.size + 1;
+  const thirdPartyRaw = thirdPartyBase
+    .map((row) => ({
+      ...row,
+      avgRemitPerRxRank: remitRankMap.get(row) ?? unrankedRemitPosition,
+      grossProfitPerRxRank: grossProfitRankMap.get(row) ?? unrankedGrossProfitPosition,
+    }))
+    .sort((a, b) =>
+      Number(b.flagged) - Number(a.flagged)
+      || a.grossProfitPerRxRank - b.grossProfitPerRxRank
+      || a.avgRemitPerRxRank - b.avgRemitPerRxRank
+      || b.totalClaims - a.totalClaims
+      || a.payer.localeCompare(b.payer)
+    );
   const thirdParty = applyReviewDecisions(thirdPartyRaw, reviewDecisionMap);
 
   const inventoryByKey = Object.values(groupBy(inventoryRows, (row) => `${row.pharmacyCode}|${row.ndc}`));

@@ -339,8 +339,10 @@ export default function App() {
     { key: 'payerType', label: 'Type' },
     { key: 'totalClaims', label: 'Claims', type: 'number' },
     { key: 'medDClaims', label: 'Med D', type: 'number' },
+    { key: 'avgRemitPerRxRank', label: 'Remit Rank', type: 'number' },
     { key: 'avgRemitPerRx', label: 'Avg Remit/RX', type: 'currency' },
     { key: 'avgAcquisitionCostPerRx', label: 'Avg Acquisition/RX', type: 'currency' },
+    { key: 'grossProfitPerRxRank', label: 'GP Rank', type: 'number' },
     { key: 'grossProfitPerRx', label: 'Gross Profit/RX', type: 'currency' },
     { key: 'b340Rate', label: '340B Rate', type: 'percent' },
     { key: 'performanceFlag', label: 'Flag' },
@@ -730,7 +732,7 @@ export default function App() {
                 { label: 'Low GP', onClick: () => setReportContext({ section: 'Third Party', filterText: 'Low gross profit', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="Third-party analysis" description="Grouped by payer within each pharmacy, with row-level drilldown to the claims contributing to payer performance." rows={state.thirdParty} columns={thirdPartyColumns} exportName="third_party_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Third-party analysis" description="Grouped by payer within each pharmacy with finance-first ranking for remit and gross profit per RX, plus row-level drilldown to the claims behind each result." rows={state.thirdParty} columns={thirdPartyColumns} exportName="third_party_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
