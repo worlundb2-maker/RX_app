@@ -1,4 +1,5 @@
 import { PHARMACIES, readDb } from './data';
+import { classifyClaimLifecycle, isInactiveClaim } from './claimLifecycle';
 import { buildStaffingState } from './staffing';
 import type { MtfClaim, PharmacyCode, PioneerClaim, PriceRow } from './types';
 
@@ -39,22 +40,12 @@ function cleanNdc(ndc: string | null | undefined) {
   return String(ndc || '').replace(/[^0-9]/g, '');
 }
 
-function isInactiveLifecycle(claim: Pick<PioneerClaim, 'normalizedClaimLifecycle' | 'claimStatus' | 'currentTransactionStatus'>) {
-  const lifecycle = String(claim.normalizedClaimLifecycle || '').toLowerCase();
-  if (['reversed', 'cancelled', 'rejected_on_hold', 'transferred', 'other_inactive'].includes(lifecycle)) return true;
-  const claimType = String(claim.claimStatus || '').toUpperCase();
-  const currentStatus = String(claim.currentTransactionStatus || '').toLowerCase();
-  if (claimType === 'B2') return true;
-  if (/cancel|reverse|reject|hold|transfer/.test(currentStatus)) return true;
-  return false;
-}
-
 function activeClaimsOnly<T extends PioneerClaim>(claims: T[]) {
-  return claims.filter((claim) => !isInactiveLifecycle(claim));
+  return claims.filter((claim) => !isInactiveClaim(claim));
 }
 
 function countLifecycle(claims: PioneerClaim[], lifecycle: PioneerClaim['normalizedClaimLifecycle']) {
-  return claims.filter((claim) => claim.normalizedClaimLifecycle === lifecycle).length;
+  return claims.filter((claim) => classifyClaimLifecycle(claim) === lifecycle).length;
 }
 
 const MEDICAID_PLAN_NAMES = [
