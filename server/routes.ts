@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { addUser, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
+import { addInitialUser, addUser, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
 import { ingestUpload } from './parser';
 import { getAppState } from './analysis';
 import { getAppDataDir } from './paths';
@@ -141,6 +141,16 @@ function scanInbox() {
 }
 
 export function registerRoutes(app: express.Express) {
+  function sanitizeCredentialText(value: unknown) {
+    return String(value || '').trim();
+  }
+
+  function normalizeRole(value: unknown) {
+    const role = String(value || '').trim().toLowerCase();
+    if (role === 'admin' || role === 'analyst' || role === 'viewer') return role;
+    return null;
+  }
+
   function parseCookies(req: express.Request) {
     const raw = String(req.headers.cookie || '');
     return raw.split(';').reduce<Record<string, string>>((acc, pair) => {
@@ -167,8 +177,13 @@ export function registerRoutes(app: express.Express) {
   }
 
   app.get('/api/bootstrap', (_req, res) => {
+    const hasUsers = readDb().users.length > 0;
     res.json({
       pharmacies: PHARMACIES,
+      auth: {
+        hasUsers,
+        requiresSetup: !hasUsers,
+      },
       inbox: {
         folder: ingestInboxDir,
         examples: inboxNamingExamples,
@@ -182,14 +197,36 @@ export function registerRoutes(app: express.Express) {
   });
 
   app.post('/api/login', (req, res) => {
-    const { username, password } = req.body ?? {};
+    const username = sanitizeCredentialText(req.body?.username);
+    const password = sanitizeCredentialText(req.body?.password);
     const db = readDb();
+    if (!db.users.length) return res.status(403).json({ message: 'No local users exist yet. Create an admin account first.' });
     const user = db.users.find((u) => u.username === username && u.password === password);
     if (!user) return res.status(401).json({ message: 'Invalid username or password' });
     const token = randomUUID();
     sessions.set(token, user.id);
     res.setHeader('Set-Cookie', `rx_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Strict`);
     res.json({ user: { id: user.id, username: user.username, role: user.role, displayName: user.displayName } });
+  });
+
+  app.post('/api/setup-admin', express.json(), (req, res) => {
+    const username = sanitizeCredentialText(req.body?.username);
+    const password = sanitizeCredentialText(req.body?.password);
+    const displayName = sanitizeCredentialText(req.body?.displayName);
+    const role = normalizeRole(req.body?.role);
+    if (!username || !password || !displayName || !role) return res.status(400).json({ message: 'All user fields are required' });
+    if (role !== 'admin') return res.status(400).json({ message: 'Initial user must be an admin' });
+    try {
+      addInitialUser({ username, password, displayName, role });
+    } catch (error: any) {
+      return res.status(409).json({ message: error?.message || 'Initial user already exists' });
+    }
+    const created = readDb().users.find((u) => u.username === username && u.password === password);
+    if (!created) return res.status(500).json({ message: 'Failed to create initial user' });
+    const token = randomUUID();
+    sessions.set(token, created.id);
+    res.setHeader('Set-Cookie', `rx_session=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Strict`);
+    res.json({ user: { id: created.id, username: created.username, role: created.role, displayName: created.displayName } });
   });
 
   app.post('/api/logout', (req, res) => {
@@ -200,9 +237,16 @@ export function registerRoutes(app: express.Express) {
   });
 
   app.post('/api/users', requireAuth, express.json(), (req, res) => {
-    const { username, password, role, displayName } = req.body ?? {};
+    const username = sanitizeCredentialText(req.body?.username);
+    const password = sanitizeCredentialText(req.body?.password);
+    const displayName = sanitizeCredentialText(req.body?.displayName);
+    const role = normalizeRole(req.body?.role);
     if (!username || !password || !role || !displayName) return res.status(400).json({ message: 'All user fields are required' });
-    addUser({ username, password, role, displayName });
+    try {
+      addUser({ username, password, role, displayName });
+    } catch (error: any) {
+      return res.status(409).json({ message: error?.message || 'User add failed' });
+    }
     res.json({ ok: true });
   });
 
