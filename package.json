@@ -8,8 +8,7 @@
     "build": "vite build",
     "start": "tsx server/index.ts --production",
     "check": "tsc --noEmit",
-    "test:regression": "tsx --test server/regression.test.ts",
-    "release:gate": "npm run check && npm run test:regression && npm run build"
+    "test:fixtures": "tsx --test tests/fixture-regression.test.ts"
   },
   "dependencies": {
     "express": "^5.1.0",
