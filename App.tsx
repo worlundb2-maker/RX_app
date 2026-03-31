@@ -681,7 +681,7 @@ export default function App() {
                 { label: 'Only pending', onClick: () => setReportContext({ section: 'SDRA', filterText: 'Pending', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="SDRA reconciliation" description="Grouped by pharmacy, with claim-level drilldown into matched MTF rows, payment source, and variance." rows={state.sdraResults} columns={sdraColumns} exportName="sdra_reconciliation" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="SDRA reconciliation" description="Grouped by pharmacy, with claim-level drilldown into matched MTF rows, payment source, and variance." rows={state.sdraResults} columns={sdraColumns} exportName="sdra_reconciliation" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -705,7 +705,7 @@ export default function App() {
                 { label: 'Brand cash', onClick: () => setReportContext({ section: 'Claims', filterText: 'Recurring brand cash claims', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="Claims analysis" description="Opportunities are grouped by pharmacy + NDC + inventory group and always drill to the exact claim rows driving the signal." rows={state.claimsAnalysis} columns={claimsColumns} exportName="claims_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Claims analysis" description="Opportunities are grouped by pharmacy + NDC + inventory group and always drill to the exact claim rows driving the signal." rows={state.claimsAnalysis} columns={claimsColumns} exportName="claims_analysis" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -730,7 +730,7 @@ export default function App() {
                 { label: 'Low GP', onClick: () => setReportContext({ section: 'Third Party', filterText: 'Low gross profit', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="Third-party analysis" description="Grouped by payer within each pharmacy, with row-level drilldown to the claims contributing to payer performance." rows={state.thirdParty} columns={thirdPartyColumns} exportName="third_party_analysis" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Third-party analysis" description="Grouped by payer within each pharmacy, with row-level drilldown to the claims contributing to payer performance." rows={state.thirdParty} columns={thirdPartyColumns} exportName="third_party_analysis" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -753,7 +753,7 @@ export default function App() {
                 { label: 'Replenish 340B', onClick: () => setReportContext({ section: 'Inventory', filterText: 'Replenish 340B', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="Inventory management" description="Inventory drilldown stays at pharmacy level so transfer-before-return decisions remain actionable and store-specific." rows={state.inventoryManagement} columns={inventoryColumns} exportName="inventory_management" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Inventory management" description="Inventory drilldown stays at pharmacy level so transfer-before-return decisions remain actionable and store-specific." rows={state.inventoryManagement} columns={inventoryColumns} exportName="inventory_management" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -776,7 +776,7 @@ export default function App() {
                 { label: 'Same-group cheaper equivalent', onClick: () => setReportContext({ section: 'NDC', filterText: 'Equivalent lower-cost NDC available in same inventory group', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="NDC optimization" description="Every NDC opportunity remains drillable to candidate cost comparisons and store-specific claim utilization." rows={state.ndcOptimization} columns={ndcColumns} exportName="ndc_optimization" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="NDC optimization" description="Every NDC opportunity remains drillable to candidate cost comparisons and store-specific claim utilization." rows={state.ndcOptimization} columns={ndcColumns} exportName="ndc_optimization" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -798,7 +798,7 @@ export default function App() {
                 { label: 'Referral verification', onClick: () => setReportContext({ section: '340B', filterText: 'referral', flaggedOnly: false }), kind: 'secondary' },
               ]}
             />
-            <ReportTable title="340B compliance" description="Compliance findings drill directly to the underlying claim so corrective action can be assigned immediately." rows={state.compliance} columns={complianceColumns} exportName="340b_compliance" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="340B compliance" description="Compliance findings drill directly to the underlying claim so corrective action can be assigned immediately." rows={state.compliance} columns={complianceColumns} exportName="340b_compliance" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 
@@ -844,7 +844,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ marginTop: 18 }}>
-              <ReportTable title="Staffing by pharmacy and role" description="Allocated positions, named coverage, temporary seats, transitional changes, and capacity pressure are all normalized to uploaded RX/day." rows={staffingRows} columns={staffingColumns} exportName="staffing_profile" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+              <ReportTable title="Staffing by pharmacy and role" description="Allocated positions, named coverage, temporary seats, transitional changes, and capacity pressure are all normalized to uploaded RX/day." rows={staffingRows} columns={staffingColumns} exportName="staffing_profile" summaryFirst onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
             </div>
           </>
         )}
@@ -1081,6 +1081,7 @@ function ReportTable({
   exportName,
   groupByPharmacy = true,
   collapseGroupsByDefault = true,
+  summaryFirst = false,
   allowDrilldown = true,
   renderDetails,
   externalFilterText,
@@ -1094,6 +1095,7 @@ function ReportTable({
   exportName: string;
   groupByPharmacy?: boolean;
   collapseGroupsByDefault?: boolean;
+  summaryFirst?: boolean;
   allowDrilldown?: boolean;
   renderDetails?: (row: any) => any;
   externalFilterText?: string;
@@ -1108,6 +1110,7 @@ function ReportTable({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [pendingLabels, setPendingLabels] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<{ x: number; y: number; row: any } | null>(null);
+  const [detailsVisible, setDetailsVisible] = useState(!summaryFirst);
   const showLabelColumn = Boolean(onApplyLabel) || rows.some((row) => row.manualLabel);
 
   useEffect(() => {
@@ -1117,6 +1120,15 @@ function ReportTable({
   useEffect(() => {
     if (externalFlaggedOnly !== undefined) setFlaggedOnly(Boolean(externalFlaggedOnly));
   }, [externalFlaggedOnly]);
+
+  useEffect(() => {
+    if (!summaryFirst) {
+      setDetailsVisible(true);
+      return;
+    }
+    const hasPromptedFocus = Boolean((externalFilterText || '').trim()) || Boolean(externalFlaggedOnly);
+    if (hasPromptedFocus) setDetailsVisible(true);
+  }, [summaryFirst, externalFilterText, externalFlaggedOnly]);
 
   useEffect(() => {
     if (!menu) return;
@@ -1200,16 +1212,26 @@ function ReportTable({
         <div>
           <h2>{title}</h2>
           <div className="small muted">{description || 'Grouped by pharmacy, sortable, filterable, exportable, and expandable to row-level detail.'}</div>
+          {summaryFirst && (
+            <div className="small muted" style={{ marginTop: 6 }}>
+              Summary-first mode is on for this tab. Open claim groups only when you are ready to drill into rows.
+            </div>
+          )}
           {onApplyLabel && <div className="small muted" style={{ marginTop: 6 }}>Use the Action taken dropdown on each row for faster labeling, or right-click any row to label it as do not flag, flag, or resolved.</div>}
         </div>
         <div className="report-actions">
           <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter this report" />
           <label className="checkbox-row"><input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only</label>
           <button className="secondary" onClick={() => exportRows(exportName, columns, sorted)}>Export CSV</button>
+          {summaryFirst && (
+            <button className="secondary" onClick={() => setDetailsVisible((value) => !value)}>
+              {detailsVisible ? 'Hide claim groups' : `Show claim groups (${sorted.length})`}
+            </button>
+          )}
         </div>
       </div>
 
-      {grouped.map((group) => {
+      {detailsVisible && grouped.map((group) => {
         const summary = summarizeGroup(group.rows, columns);
         const groupOpen = groupByPharmacy ? Boolean(expandedGroups[group.key]) : true;
         return (
@@ -1309,6 +1331,14 @@ function ReportTable({
           )}
         </div>
       )})}
+
+      {!detailsVisible && (
+        <div className="group-summary" style={{ marginTop: 10 }}>
+          {sorted.length
+            ? `Ready to drill into ${sorted.length} grouped row${sorted.length === 1 ? '' : 's'}.`
+            : 'No rows match the current filters.'}
+        </div>
+      )}
 
       {menu && onApplyLabel && (
         <div className="context-menu" style={{ top: menu.y, left: menu.x }}>
