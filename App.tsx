@@ -114,8 +114,10 @@ export default function App() {
   const [section, setSection] = useState<Section>('Dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [selectedPharmacy, setSelectedPharmacy] = useState('ALL');
-  const [selectedMonth, setSelectedMonth] = useState('ALL');
-  const [timeView, setTimeView] = useState<'combined' | 'month_by_month'>('combined');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [iraStartDate, setIraStartDate] = useState('');
+  const [iraEndDate, setIraEndDate] = useState('');
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
@@ -136,7 +138,10 @@ export default function App() {
   async function loadState(pharmacyCode = selectedPharmacy) {
     const params = new URLSearchParams();
     if (pharmacyCode && pharmacyCode !== 'ALL') params.set('pharmacyCode', pharmacyCode);
-    if (selectedMonth && selectedMonth !== 'ALL') params.set('month', selectedMonth);
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    if (iraStartDate) params.set('iraStartDate', iraStartDate);
+    if (iraEndDate) params.set('iraEndDate', iraEndDate);
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`/api/state${query}`);
     if (res.status === 401) {
@@ -164,7 +169,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     loadState(selectedPharmacy);
-  }, [selectedPharmacy, selectedMonth, user]);
+  }, [selectedPharmacy, startDate, endDate, iraStartDate, iraEndDate, user]);
 
   useEffect(() => {
     if (section === 'Users' && user?.role !== 'admin') setSection('Dashboard');
@@ -604,17 +609,6 @@ export default function App() {
 
   const uploadCounts = countBy(state.uploads, (row) => row.type);
   const staffingSummary = state.staffing?.summary || {};
-  const reportingMonths = bootstrap.reportingMonths || [];
-  const selectedMonthIndex = reportingMonths.findIndex((month) => month === selectedMonth);
-
-  function moveMonth(offset: number) {
-    if (!reportingMonths.length || selectedMonth === 'ALL') return;
-    const current = reportingMonths.findIndex((month) => month === selectedMonth);
-    if (current < 0) return;
-    const next = current + offset;
-    if (next < 0 || next >= reportingMonths.length) return;
-    setSelectedMonth(reportingMonths[next]);
-  }
 
   return (
     <div className="app-shell">
@@ -634,25 +628,17 @@ export default function App() {
               </select>
             )}
             {user && (
-              <select value={timeView} onChange={(e) => {
-                const nextView = e.target.value as 'combined' | 'month_by_month';
-                setTimeView(nextView);
-                if (nextView === 'combined') setSelectedMonth('ALL');
-              }}>
-                <option value="combined">Combined view</option>
-                <option value="month_by_month">Month-by-month view</option>
-              </select>
-            )}
-            {user && (
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-                {timeView === 'combined' && <option value="ALL">All months</option>}
-                {reportingMonths.map((month) => <option key={month} value={month}>{month}</option>)}
-              </select>
-            )}
-            {user && timeView === 'month_by_month' && (
               <>
-                <button className="secondary" type="button" onClick={() => moveMonth(1)} disabled={selectedMonthIndex < 0 || selectedMonthIndex >= reportingMonths.length - 1}>Older</button>
-                <button className="secondary" type="button" onClick={() => moveMonth(-1)} disabled={selectedMonthIndex <= 0}>Newer</button>
+                <label className="date-range-control">
+                  <span>Main range</span>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Main start date" />
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Main end date" />
+                </label>
+                <label className="date-range-control">
+                  <span>IRA 2025 comparison range</span>
+                  <input type="date" value={iraStartDate} onChange={(e) => setIraStartDate(e.target.value)} aria-label="IRA comparison start date" />
+                  <input type="date" value={iraEndDate} onChange={(e) => setIraEndDate(e.target.value)} aria-label="IRA comparison end date" />
+                </label>
               </>
             )}
             <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
