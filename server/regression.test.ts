@@ -343,6 +343,8 @@ test('date range filtering scopes dashboard and comparison outputs to selected r
   assert.equal(may2026.kpi.pioneerClaims, 1);
   assert.equal(may2025.financeSummary.recordedRevenue, 0);
   assert.equal(may2026.financeSummary.recordedRevenue, 90);
+  assert.equal(may2025.pharmacyCards.find((row) => row.code === 'SEMINOLE')?.claimCount, 0);
+  assert.equal(may2026.pharmacyCards.find((row) => row.code === 'SEMINOLE')?.claimCount, 1);
   assert.equal(may2025.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 1);
   assert.equal(may2025.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
   assert.equal(may2026.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 0);
