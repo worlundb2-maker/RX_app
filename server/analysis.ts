@@ -1143,6 +1143,81 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     referralChecks: compliance.filter((row) => /referral verification queue/i.test(row?.finding || '')).length
   };
 
+  const b340SavingsRaw = pioneerClaims
+    .filter((claim) => claim.inventoryGroup === '340B')
+    .map((claim) => {
+      const ndc = cleanNdc(claim.ndc);
+      const inventoryWac = db.inventoryRows.find((row) => row.pharmacyCode === claim.pharmacyCode && cleanNdc(row.ndc) === ndc)?.wac ?? null;
+      const priceWac = priceMaps.byGroupExact.get(`RX|${ndc}`)?.acquisitionCost ?? null;
+      const wacPerUnit = inventoryWac ?? priceWac;
+      const acquisitionPerUnit = priceMaps.byGroupExact.get(`340B|${ndc}`)?.acquisitionCost ?? acquisitionForClaim(claim, priceMaps);
+      const quantity = Number(claim.quantity || 0);
+      const savings = wacPerUnit != null && acquisitionPerUnit != null && quantity > 0
+        ? money((wacPerUnit - acquisitionPerUnit) * quantity)
+        : null;
+      const flagged = savings != null && savings < 0;
+      return {
+        id: `${claim.pharmacyCode}|${claim.rxNumber}|${claim.fillNumber}|${ndc}|340b-savings`,
+        pharmacyCode: claim.pharmacyCode,
+        pharmacyName: pharmacyNameOf(claim.pharmacyCode),
+        claim,
+        ndc,
+        wacPerUnit,
+        acquisitionPerUnit,
+        quantity,
+        savings,
+        flagged,
+        severity: flagged ? 'high' : 'low',
+        flagReason: flagged ? '340B acquisition cost exceeded WAC baseline' : null,
+        details: {
+          columns: ['Rx', 'Drug', 'NDC', 'Qty', 'WAC / Unit', '340B Cost / Unit', 'Savings', 'Fill Date'],
+          rows: [[claim.rxNumber, claim.drugName, ndc, quantity, wacPerUnit != null ? money(wacPerUnit) : '', acquisitionPerUnit != null ? money(acquisitionPerUnit) : '', savings != null ? money(savings) : '', claim.fillDate || claim.claimDate || '']]
+        }
+      };
+    })
+    .sort((a, b) => Number(b.flagged) - Number(a.flagged) || (b.savings || 0) - (a.savings || 0));
+  const b340Savings = applyReviewDecisions(b340SavingsRaw, reviewDecisionMap);
+
+  const assistanceByNdc = Object.values(groupBy(db.patientAssistanceRows, (row) => cleanNdc(row.ndc))).reduce<Record<string, { maxClaim: number; maxUnit: number; programs: string[] }>>((acc, group) => {
+    const ndc = cleanNdc(group[0]?.ndc);
+    const maxClaim = Math.max(0, ...group.filter((row) => row.assistanceBasis === 'claim').map((row) => Number(row.assistanceAmount || 0)));
+    const maxUnit = Math.max(0, ...group.filter((row) => row.assistanceBasis === 'unit').map((row) => Number(row.assistanceAmount || 0)));
+    acc[ndc] = { maxClaim, maxUnit, programs: group.map((row) => row.programName).filter(Boolean) };
+    return acc;
+  }, {});
+
+  const affordabilityRaw = pioneerClaims
+    .filter((claim) => assistanceByNdc[cleanNdc(claim.ndc)])
+    .map((claim) => {
+      const ndc = cleanNdc(claim.ndc);
+      const assistance = assistanceByNdc[ndc];
+      const quantity = Number(claim.quantity || 0);
+      const claimCap = (assistance?.maxClaim || 0) + ((assistance?.maxUnit || 0) * quantity);
+      const patientPay = Math.max(Number(claim.patientPayAmount || 0), 0);
+      const affordabilityApplied = money(Math.min(patientPay, Math.max(claimCap, 0)));
+      const uncoveredAfterAssistance = money(Math.max(patientPay - affordabilityApplied, 0));
+      return {
+        id: `${claim.pharmacyCode}|${claim.rxNumber}|${claim.fillNumber}|${ndc}|affordability`,
+        pharmacyCode: claim.pharmacyCode,
+        pharmacyName: pharmacyNameOf(claim.pharmacyCode),
+        claim,
+        ndc,
+        matchedPrograms: assistance.programs.join('; '),
+        patientPay,
+        affordabilityApplied,
+        uncoveredAfterAssistance,
+        flagged: uncoveredAfterAssistance > 20,
+        severity: uncoveredAfterAssistance > 50 ? 'high' : uncoveredAfterAssistance > 20 ? 'medium' : 'low',
+        flagReason: uncoveredAfterAssistance > 20 ? 'Residual patient cost after assistance' : null,
+        details: {
+          columns: ['Rx', 'Drug', 'NDC', 'Programs', 'Patient Pay', 'Estimated Assistance', 'Residual', 'Fill Date'],
+          rows: [[claim.rxNumber, claim.drugName, ndc, assistance.programs.join('; '), money(patientPay), money(affordabilityApplied), money(uncoveredAfterAssistance), claim.fillDate || claim.claimDate || '']]
+        }
+      };
+    })
+    .sort((a, b) => Number(b.flagged) - Number(a.flagged) || b.uncoveredAfterAssistance - a.uncoveredAfterAssistance);
+  const affordability = applyReviewDecisions(affordabilityRaw, reviewDecisionMap);
+
   const pairedFinancials = generalAnalyticsClaims.map((claim) => grossProfitTuple(claim, priceMaps)).filter(Boolean) as { remit:number; acquisition:number; grossProfit:number }[];
   const financeByPharmacy = PHARMACIES.map((pharmacy) => {
     const claims = generalAnalyticsClaims.filter((claim) => claim.pharmacyCode === pharmacy.code);
@@ -1166,6 +1241,12 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     const weightedNdcSavings = money(sum(ndcOptimization
       .filter((row) => row.pharmacyCode === pharmacy.code)
       .map((row) => row.weightedSavingsTotal || 0)));
+    const b340SavingsTotal = money(sum(b340Savings
+      .filter((row) => row.pharmacyCode === pharmacy.code)
+      .map((row) => row.savings || 0)));
+    const directToPatientAffordability = money(sum(affordability
+      .filter((row) => row.pharmacyCode === pharmacy.code)
+      .map((row) => row.affordabilityApplied || 0)));
     return {
       pharmacyCode: pharmacy.code,
       pharmacyName: pharmacy.name,
@@ -1177,6 +1258,8 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
       grossMargin: percent(grossProfit, revenue),
       sdraCollectibleGap,
       improper340BExposure,
+      b340SavingsTotal,
+      directToPatientAffordability,
       weightedNdcSavings,
       flaggedActions,
     };
@@ -1193,6 +1276,8 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     improper340BExposure: money(sum(sdraResults
       .filter((row) => /340B paid and should not have been|Unexpected 340B payment value/.test(row.status))
       .map((row) => Math.max(row.rawActual || row.actual || 0, 0)))),
+    b340SavingsTotal: money(sum(b340Savings.map((row) => row.savings || 0))),
+    directToPatientAffordability: money(sum(affordability.map((row) => row.affordabilityApplied || 0))),
     weightedNdcSavings: ndcSummary.totalWeightedSavings,
     sameGroupSavings: ndcSummary.totalSameGroupSavings,
     totalInventoryValue: kpi.totalInventoryValue,
@@ -1273,6 +1358,21 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     ndcSummary,
     compliance,
     complianceSummary,
+    b340Savings,
+    b340SavingsSummary: {
+      claims: b340Savings.length,
+      modeledClaims: b340Savings.filter((row) => row.savings != null).length,
+      totalSavings: money(sum(b340Savings.map((row) => row.savings || 0))),
+      negativeSavingsClaims: b340Savings.filter((row) => (row.savings || 0) < 0).length,
+    },
+    affordability,
+    affordabilitySummary: {
+      rows: affordability.length,
+      matchedClaims: affordability.filter((row) => row.affordabilityApplied > 0).length,
+      totalAffordability: money(sum(affordability.map((row) => row.affordabilityApplied || 0))),
+      residualExposure: money(sum(affordability.map((row) => row.uncoveredAfterAssistance || 0))),
+      uploadedPlans: db.patientAssistanceRows.length,
+    },
     uploads,
     users: db.users
   };

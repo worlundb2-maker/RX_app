@@ -22,6 +22,7 @@ function resetDb() {
     mtfClaims: [],
     inventoryRows: [],
     priceRows: [],
+    patientAssistanceRows: [],
     reviewDecisions: [],
   });
 }
@@ -268,6 +269,47 @@ test('day-supply exceptions suppress expected stock-cycle claims but still flag 
   assert.equal(groupRow?.atypicalDaysSupplyCount, 1);
 });
 
+test('340B savings use WAC minus 340B acquisition cost on 340B claims only', () => {
+  const pioneerPath = writeWorkbook('pioneer-340b-savings.xlsx', [
+    { RxNumber: 'S100', NDC: '11111-1111-11', FillDate: '2026-03-10', Quantity: 10, 'Days Supply': 30, PrimaryPayer: 'Med D PDP', InventoryGroup: '340B', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 15 },
+    { RxNumber: 'S101', NDC: '11111-1111-11', FillDate: '2026-03-10', Quantity: 5, 'Days Supply': 30, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 12 },
+  ]);
+  const inventoryPath = writeWorkbook('inventory-340b-savings.xlsx', [
+    { NDC: '11111-1111-11', Name: 'Drug A', 'Inventory Group': '340B', 'Inventory On Hand': 10, 'Last Cost Paid': 3, 'Stock Size': 10, WAC: 8 },
+  ]);
+  const price340BPath = writeWorkbook('price-340b-savings.xlsx', [
+    { NDC: '11111111111', ProperContractPrice: 3, SellDescription: 'Drug A' },
+  ]);
+
+  ingestUpload(pioneerPath, 'pioneer');
+  ingestUpload(inventoryPath, 'inventory', 'SEMINOLE');
+  ingestUpload(price340BPath, 'price_340b');
+
+  const state = getAppState();
+  assert.equal(state.b340Savings.length, 1);
+  assert.equal(state.b340Savings[0].claim.rxNumber, 'S100');
+  assert.equal(state.b340Savings[0].savings, 50);
+  assert.equal(state.b340SavingsSummary.totalSavings, 50);
+});
+
+test('patient assistance upload supports direct-to-patient affordability totals', () => {
+  const pioneerPath = writeWorkbook('pioneer-affordability.xlsx', [
+    { RxNumber: 'A100', NDC: '22222-2222-22', FillDate: '2026-03-10', Quantity: 1, 'Days Supply': 30, PrimaryPayer: 'Commercial', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 40 },
+    { RxNumber: 'A101', NDC: '22222-2222-22', FillDate: '2026-03-10', Quantity: 2, 'Days Supply': 30, PrimaryPayer: 'Commercial', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 25 },
+  ]);
+  const assistancePath = writeWorkbook('patient-assistance.xlsx', [
+    { NDC: '22222-2222-22', 'Program Name': 'Brand Copay Card', 'Assistance Amount': 30, 'Assistance Basis': 'claim' },
+  ]);
+
+  ingestUpload(pioneerPath, 'pioneer');
+  ingestUpload(assistancePath, 'patient_assistance');
+
+  const state = getAppState();
+  assert.equal(state.affordability.length, 2);
+  assert.equal(state.affordabilitySummary.totalAffordability, 55);
+  assert.equal(state.affordabilitySummary.residualExposure, 10);
+});
+
 test('inbox filename parser assigns pharmacy and type for supported naming patterns', () => {
   assert.deepEqual(parseInboxAssignment('SEMINOLE_pioneer_claims_01012026to03202026.xlsx'), {
     type: 'pioneer',
@@ -281,6 +323,9 @@ test('inbox filename parser assigns pharmacy and type for supported naming patte
 
   assert.deepEqual(parseInboxAssignment('GLOBAL_price_340b_340b_prices.xlsx'), {
     type: 'price_340b',
+  });
+  assert.deepEqual(parseInboxAssignment('GLOBAL_patient_assistance_plan.xlsx'), {
+    type: 'patient_assistance',
   });
 
   assert.deepEqual(parseInboxAssignment('SEMINOLE__pioneer__claims.xlsx'), {

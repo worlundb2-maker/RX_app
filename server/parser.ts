@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import xlsx from 'xlsx';
 import { randomUUID } from 'node:crypto';
 import { pharmacyByCode, readDb, resolvePharmacy, writeDb } from './data';
-import type { InventoryGroup, InventoryRow, MtfClaim, PharmacyCode, PioneerClaim, PriceRow, UploadType } from './types';
+import type { InventoryGroup, InventoryRow, MtfClaim, PatientAssistanceRow, PharmacyCode, PioneerClaim, PriceRow, UploadType } from './types';
 
 type RowObject = Record<string, any>;
 
@@ -87,6 +87,14 @@ const HEADER_GROUPS: Record<UploadType, { groups: string[][]; minScore: number }
       ['propercontractprice', 'acquisitioncost', 'cost', 'lastcostpaid', 'nadac'],
       ['selldescription', 'drugname', 'description', 'name'],
       ['gcn', 'genericname', 'manufacturer'],
+    ],
+  },
+  patient_assistance: {
+    minScore: 2,
+    groups: [
+      ['ndc', 'ndc11', 'drugndc'],
+      ['assistanceamount', 'copayassistance', 'supportamount', 'benefitamount', 'maxbenefit'],
+      ['programname', 'program', 'plan', 'assistanceplan'],
     ],
   },
 };
@@ -375,6 +383,33 @@ function parsePriceRow(row: RowObject, group: InventoryGroup): PriceRow | null {
   };
 }
 
+function parsePatientAssistanceRow(row: RowObject): PatientAssistanceRow | null {
+  const ndc = cleanNdc(findValue(row, ['NDC', 'NDC11', 'Drug NDC', 'Product NDC']));
+  if (!ndc) return null;
+  const assistanceAmount = asNumber(findValue(row, [
+    'Assistance Amount',
+    'Copay Assistance',
+    'Support Amount',
+    'Benefit Amount',
+    'Max Benefit',
+    'Max Assistance',
+    'Patient Savings',
+  ]));
+  if (assistanceAmount == null || assistanceAmount <= 0) return null;
+  const programName = asText(findValue(row, ['Program Name', 'Program', 'Plan', 'Assistance Plan'])) || 'Patient assistance';
+  const basisRaw = asText(findValue(row, ['Assistance Basis', 'Benefit Basis', 'Basis', 'Unit Basis'])).toLowerCase();
+  const assistanceBasis = /unit|qty|quantity|each/.test(basisRaw) ? 'unit' : 'claim';
+  return {
+    id: randomUUID(),
+    ndc,
+    programName,
+    sponsor: asText(findValue(row, ['Sponsor', 'Manufacturer', 'Payer', 'Vendor'])) || null,
+    assistanceAmount,
+    assistanceBasis,
+    notes: asText(findValue(row, ['Notes', 'Comment', 'Details'])) || null,
+  };
+}
+
 function chosenPharmacy(requestedPharmacy: PharmacyCode | undefined, row: RowObject) {
   return pharmacyByCode(requestedPharmacy)
     || resolvePharmacy({
@@ -542,6 +577,13 @@ export function ingestUpload(filePath: string, type: UploadType, requestedPharma
     db.priceRows.push(...priceRows);
     writeDb(db);
     return finalizeResult(priceRows.length, parsed.meta, []);
+  }
+
+  if (type === 'patient_assistance') {
+    const assistanceRows = rows.map((row) => parsePatientAssistanceRow(row)).filter(Boolean) as PatientAssistanceRow[];
+    db.patientAssistanceRows = assistanceRows;
+    writeDb(db);
+    return finalizeResult(assistanceRows.length, parsed.meta, []);
   }
 
   return finalizeResult(0, parsed.meta, []);
