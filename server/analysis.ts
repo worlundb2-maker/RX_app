@@ -13,6 +13,7 @@ const SDRA_REFERENCE = [
 ] as const;
 
 const sdraMap = new Map<string, number>(SDRA_REFERENCE as unknown as [string, number][]);
+const SDRA_MTF_START_DATE = '2026-01-01';
 
 function groupBy<T>(items: T[], key: (item: T) => string) {
   return items.reduce<Record<string, T[]>>((acc, item) => {
@@ -36,15 +37,27 @@ function money(value: number) {
 }
 
 function claimYear(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>) {
-  const candidate = String(claim.fillDate || claim.claimDate || '');
+  const candidate = claimServiceDate(claim) || '';
   const match = /^(\d{4})/.exec(candidate);
   return match ? Number(match[1]) : null;
+}
+
+function claimServiceDate(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>) {
+  return normalizeIsoDate(claim.fillDate) || normalizeIsoDate(claim.claimDate);
+}
+
+function mtfServiceDate(row: Pick<MtfClaim, 'serviceDate' | 'receiptDate'>) {
+  return normalizeIsoDate(row.serviceDate) || normalizeIsoDate(row.receiptDate);
+}
+
+function isSdraProgramDate(date: string | null) {
+  return Boolean(date && date >= SDRA_MTF_START_DATE);
 }
 
 function isSdraExpectedEligibleClaim(claim: PioneerClaim) {
   return claim.payerType === 'Med D'
     && sdraMap.has(cleanNdc(claim.ndc))
-    && claimYear(claim) !== 2025;
+    && isSdraProgramDate(claimServiceDate(claim));
 }
 
 function normalizeIsoDate(value: string | null | undefined) {
@@ -61,14 +74,14 @@ function dateWithinRange(date: string | null, startDate?: string, endDate?: stri
 
 function claimInDateRange(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>, startDate?: string, endDate?: string) {
   if (!startDate && !endDate) return true;
-  const fillDate = normalizeIsoDate(claim.fillDate);
+  const fillDate = claimServiceDate(claim);
   const claimDate = normalizeIsoDate(claim.claimDate);
   return dateWithinRange(fillDate, startDate, endDate) || dateWithinRange(claimDate, startDate, endDate);
 }
 
 function mtfInDateRange(claim: Pick<MtfClaim, 'serviceDate' | 'receiptDate'>, startDate?: string, endDate?: string) {
   if (!startDate && !endDate) return true;
-  const serviceDate = normalizeIsoDate(claim.serviceDate);
+  const serviceDate = mtfServiceDate(claim);
   const receiptDate = normalizeIsoDate(claim.receiptDate);
   return dateWithinRange(serviceDate, startDate, endDate) || dateWithinRange(receiptDate, startDate, endDate);
 }
@@ -555,21 +568,22 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     };
   });
 
-  const baselineSdraClaims2025 = pioneerClaims.filter((claim) =>
-    claimYear(claim) === 2025
+  const baselineSdraClaimsPreProgram = pioneerClaims.filter((claim) =>
+    !isSdraProgramDate(claimServiceDate(claim))
     && claim.payerType === 'Med D'
     && sdraMap.has(cleanNdc(claim.ndc))
   );
-  const baselineClaimExactKeys = new Set(baselineSdraClaims2025.map((claim) => claimKey(claim)));
-  const baselineClaimRxFillKeys = new Set(baselineSdraClaims2025.map((claim) => rxFillKey(claim.pharmacyCode, claim.rxNumber, claim.fillNumber)));
-  const baselineClaimRxOnlyKeys = new Set(baselineSdraClaims2025.map((claim) => rxOnlyKey(claim.pharmacyCode, claim.rxNumber)));
+  const baselineClaimExactKeys = new Set(baselineSdraClaimsPreProgram.map((claim) => claimKey(claim)));
+  const baselineClaimRxFillKeys = new Set(baselineSdraClaimsPreProgram.map((claim) => rxFillKey(claim.pharmacyCode, claim.rxNumber, claim.fillNumber)));
 
-  const isBaseline2025MtfRow = (row: MtfClaim) =>
+  const isPreProgramMtfRow = (row: MtfClaim) =>
+    !isSdraProgramDate(mtfServiceDate(row))
+    || (
     baselineClaimExactKeys.has(paymentKey(row))
     || baselineClaimRxFillKeys.has(rxFillKey(row.pharmacyCode, row.rxNumber, row.fillNumber))
-    || baselineClaimRxOnlyKeys.has(rxOnlyKey(row.pharmacyCode, row.rxNumber));
+  );
 
-  const mtfClaimsForSdra = mtfClaims.filter((row) => !isBaseline2025MtfRow(row));
+  const mtfClaimsForSdra = mtfClaims.filter((row) => !isPreProgramMtfRow(row));
 
   const mtfByExact = new Map<string, MtfClaim[]>();
   const mtfByRxFill = new Map<string, MtfClaim[]>();
@@ -585,7 +599,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
 
   const usedMtfIds = new Set<string>();
   const sdraClaims = pioneerClaims.filter((claim) =>
-    claimYear(claim) !== 2025
+    isSdraProgramDate(claimServiceDate(claim))
     && claim.payerType === 'Med D'
     && sdraMap.has(cleanNdc(claim.ndc))
   );
@@ -695,7 +709,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     const count = (status: string) => rows.filter((row) => row.status === status).length;
     const eligibleRxRows = pioneerClaims.filter((claim) =>
       claim.pharmacyCode === pharmacy.code
-      && claimYear(claim) !== 2025
+      && isSdraProgramDate(claimServiceDate(claim))
       && claim.inventoryGroup === 'RX'
       && claim.payerType === 'Med D'
       && sdraMap.has(cleanNdc(claim.ndc))
