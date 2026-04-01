@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
 type Pharmacy = { code:string; name:string; color:string; npi:string; ncpdp:string };
 type User = { id:string; username:string; role:string; displayName:string };
@@ -129,6 +129,8 @@ export default function App() {
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
   const [headerCompact, setHeaderCompact] = useState(false);
+  const stateRequestIdRef = useRef(0);
+  const lastStateQueryRef = useRef('');
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
   const visibleSections = user?.role === 'admin'
     ? allSections
@@ -138,7 +140,7 @@ export default function App() {
     return type === 'price_rx' || type === 'price_340b' || type === 'patient_assistance';
   }
 
-  async function loadState(pharmacyCode = selectedPharmacy) {
+  async function loadState(pharmacyCode = selectedPharmacy, options?: { force?: boolean }) {
     const params = new URLSearchParams();
     if (pharmacyCode && pharmacyCode !== 'ALL') params.set('pharmacyCode', pharmacyCode);
     if (startDate) params.set('startDate', startDate);
@@ -146,13 +148,19 @@ export default function App() {
     if (iraStartDate) params.set('iraStartDate', iraStartDate);
     if (iraEndDate) params.set('iraEndDate', iraEndDate);
     const query = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`/api/state${query}`);
+    if (!options?.force && state && lastStateQueryRef.current === query) return;
+    const requestId = stateRequestIdRef.current + 1;
+    stateRequestIdRef.current = requestId;
+    const res = await fetch(`/api/state${query}`, { credentials: 'same-origin' });
+    if (requestId !== stateRequestIdRef.current) return;
     if (res.status === 401) {
       setUser(null);
       setState(null);
+      lastStateQueryRef.current = '';
       return;
     }
     setState(await res.json());
+    lastStateQueryRef.current = query;
   }
 
   useEffect(() => {
@@ -256,7 +264,7 @@ export default function App() {
     }
     setUploadQueue([]);
     setMessage(`${successCount} of ${notes.length} queued files uploaded · ${notes.join(' | ')}`);
-    loadState();
+    loadState(undefined, { force: true });
   }
 
   async function saveReviewDecision(targetKey: string, label: 'flag' | 'do_not_flag' | 'resolved' | null) {
@@ -273,7 +281,7 @@ export default function App() {
   async function clearDataset(dataset: string) {
     await fetch('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset }) });
     setMessage(`Cleared ${dataset}`);
-    loadState();
+    loadState(undefined, { force: true });
   }
 
   async function scanInbox() {
@@ -283,7 +291,7 @@ export default function App() {
     const note = `${data.importedCount || 0} imported`;
     const rejected = data.rejectedCount ? ` · ${data.rejectedCount} rejected` : '';
     setMessage(`Inbox scan complete: ${note}${rejected}`);
-    loadState();
+    loadState(undefined, { force: true });
   }
 
   function updateQueuedFile(id: string, patch: Partial<UploadQueueItem>) {
@@ -301,7 +309,7 @@ export default function App() {
     setMessage(res.ok ? 'User added' : data.message || 'User add failed');
     if (res.ok) {
       setUserForm({ username:'', password:'', displayName:'', role:'viewer' });
-      loadState();
+      loadState(undefined, { force: true });
     }
   }
 
@@ -315,10 +323,14 @@ export default function App() {
     if (authBusy) return;
     setAuthBusy(true);
     try {
-      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+      fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {
+        // ignore transient network errors, and still clear local auth state
+      });
     } catch {
       // ignore transient network errors, and still clear local auth state
     } finally {
+      stateRequestIdRef.current += 1;
+      lastStateQueryRef.current = '';
       setUser(null);
       setState(null);
       setSection('Dashboard');
