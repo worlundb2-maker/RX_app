@@ -1359,6 +1359,7 @@ function ReportTable({
   const [sortKey, setSortKey] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterText, setFilterText] = useState(externalFilterText || '');
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [flaggedOnly, setFlaggedOnly] = useState(Boolean(externalFlaggedOnly));
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -1387,14 +1388,23 @@ function ReportTable({
 
   const filtered = useMemo(() => {
     const text = filterText.trim().toLowerCase();
+    const activeColumnFilters = Object.entries(columnFilters).filter(([, value]) => value.trim());
     return rows.filter((row) => {
       if (flaggedOnly && !row.flagged) return false;
+      if (activeColumnFilters.length) {
+        const matchesColumns = activeColumnFilters.every(([columnKey, filterValue]) => {
+          const column = columns.find((item) => item.key === columnKey);
+          if (!column) return true;
+          return normalizeForSearch(cellValue(row, column)).includes(filterValue.trim().toLowerCase());
+        });
+        if (!matchesColumns) return false;
+      }
       if (!text) return true;
       return columns.some((column) => normalizeForSearch(cellValue(row, column)).includes(text))
         || normalizeForSearch(row.manualLabel).includes(text)
         || normalizeForSearch(row.flagReason).includes(text);
     });
-  }, [rows, columns, filterText, flaggedOnly]);
+  }, [rows, columns, filterText, flaggedOnly, columnFilters]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -1460,6 +1470,9 @@ function ReportTable({
         </div>
         <div className="report-actions">
           <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter this report" />
+          {Object.values(columnFilters).some((value) => value.trim()) && (
+            <button className="secondary" onClick={() => setColumnFilters({})}>Clear column filters</button>
+          )}
           <label className="checkbox-row"><input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only</label>
           <button className="secondary" onClick={() => exportRows(exportName, columns, sorted)}>Export CSV</button>
         </div>
@@ -1501,6 +1514,21 @@ function ReportTable({
                       }}>
                         {column.label}{sortKey === column.key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
                       </button>
+                    </th>
+                  ))}
+                </tr>
+                <tr className="column-filter-row">
+                  {allowDrilldown && <th />}
+                  {showLabelColumn && <th />}
+                  {columns.map((column) => (
+                    <th key={`${column.key}-filter`} style={{ width: column.width }} data-priority={column.compactPriority || 'primary'}>
+                      <input
+                        className="column-filter-input"
+                        value={columnFilters[column.key] || ''}
+                        onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
+                        placeholder={`Filter ${column.label}`}
+                        aria-label={`Filter ${column.label}`}
+                      />
                     </th>
                   ))}
                 </tr>
