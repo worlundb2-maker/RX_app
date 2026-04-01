@@ -449,7 +449,16 @@ th {
   font-weight: 700;
   cursor: pointer;
 }
-.row-flagged { background: #2a2212; }
+.row-flagged {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.26) 0,
+    rgba(245, 158, 11, 0.12) 18px,
+    rgba(15, 23, 38, 0.95) 56px,
+    #0f1726 100%
+  );
+  box-shadow: inset 4px 0 0 rgba(251, 191, 36, 0.9);
+}
 .detail-row td { background: #101a2b; }
 .detail-wrap {
   border: 1px solid var(--border);
