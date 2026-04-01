@@ -370,6 +370,25 @@ test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out
   assert.match(String(row2025?.note || ''), /excluded from SDRA totals/i);
 });
 
+test('staffing calculations exclude 2025 IRA-only claims and keep 4.5-day weighting on active years', () => {
+  const pioneerPath = writeWorkbook('pioneer-staffing-ira-year-filter.xlsx', [
+    { RxNumber: '9251', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9252', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+
+  ingestUpload(pioneerPath, 'pioneer');
+
+  const state = getAppState('SEMINOLE');
+  const seminole = state.staffing.byPharmacy.find((row) => row.pharmacyCode === 'SEMINOLE');
+
+  assert.equal(seminole?.observedRx, 1);
+  assert.equal(seminole?.weightedOperatingDays, 0.5);
+  assert.equal(seminole?.avgRxPerWeightedDay, 2);
+  assert.equal(state.staffing.summary.totalObservedRx, 1);
+  assert.equal(state.staffing.summary.totalWeightedOperatingDays, 0.5);
+  assert.equal(state.staffing.summary.overallAvgRxPerWeightedDay, 2);
+});
+
 test('date range filtering scopes dashboard and comparison outputs to selected range', () => {
   const pioneerPath = writeWorkbook('pioneer-month-filter.xlsx', [
     { RxNumber: '9301', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },

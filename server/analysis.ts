@@ -1329,7 +1329,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     grossMarginDeltaVs2025: !baseline2025 || row.year === 2025 ? 0 : Number(((row.grossMargin || 0) - (baseline2025.grossMargin || 0)).toFixed(4)),
   }));
 
-  const staffing = buildStaffingState(pioneerClaims);
+  const staffing = buildStaffingState(generalAnalyticsClaims);
 
   const pharmacyCardsEnhanced = pharmacyCards.map((card) => ({
     ...card,
