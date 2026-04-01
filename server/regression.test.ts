@@ -316,6 +316,8 @@ test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out
   const row2025 = state.iraYearComparison.find((row) => row.year === 2025);
   const row2026 = state.iraYearComparison.find((row) => row.year === 2026);
 
+  assert.equal(state.kpi.pioneerClaims, 1);
+  assert.equal(state.financeSummary.recordedRevenue, 80);
   assert.equal(row2025?.totalRevenue, 100);
   assert.equal(row2026?.totalRevenue, 80);
   assert.equal(row2026?.revenueDeltaVs2025, -20);
@@ -337,10 +339,11 @@ test('date range filtering scopes dashboard and comparison outputs to selected r
   const may2025 = getAppState('SEMINOLE', { startDate: '2025-05-01', endDate: '2025-05-31' });
   const may2026 = getAppState('SEMINOLE', { startDate: '2026-05-01', endDate: '2026-05-31' });
 
-  assert.equal(may2025.kpi.pioneerClaims, 1);
+  assert.equal(may2025.kpi.pioneerClaims, 0);
   assert.equal(may2026.kpi.pioneerClaims, 1);
-  assert.equal(may2025.financeSummary.recordedRevenue, 100);
+  assert.equal(may2025.financeSummary.recordedRevenue, 0);
   assert.equal(may2026.financeSummary.recordedRevenue, 90);
+  assert.equal(may2025.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 1);
   assert.equal(may2025.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
   assert.equal(may2026.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 0);
 });

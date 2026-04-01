@@ -506,6 +506,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   const scopedPioneerClaims = pharmacyCode ? db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.pioneerClaims;
   const pioneerClaimsAll = scopedPioneerClaims.filter((row) => claimInDateRange(row, startDate, endDate));
   const pioneerClaims = activeClaimsOnly(pioneerClaimsAll);
+  const generalAnalyticsClaims = pioneerClaims.filter((row) => claimYear(row) !== 2025);
   const scopedMtfClaims = pharmacyCode ? db.mtfClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.mtfClaims;
   const mtfClaims = scopedMtfClaims.filter((row) => mtfInDateRange(row, startDate, endDate));
   const inventoryRows = pharmacyCode ? db.inventoryRows.filter((row) => row.pharmacyCode === pharmacyCode) : db.inventoryRows;
@@ -519,13 +520,13 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   const inventoryReferenceMap = buildInventoryReferenceMap(inventoryRows);
 
   const kpi = {
-    pioneerClaims: pioneerClaims.length,
+    pioneerClaims: generalAnalyticsClaims.length,
     inactiveClaimsExcluded: pioneerClaimsAll.length - pioneerClaims.length,
-    medDClaims: pioneerClaims.filter((row) => row.payerType === 'Med D').length,
+    medDClaims: generalAnalyticsClaims.filter((row) => row.payerType === 'Med D').length,
     inventoryItems: inventoryRows.length,
     totalInventoryValue: money(sum(inventoryRows.map((row) => Math.max(row.onHand, 0) * Number(row.lastCostPaid || 0)))),
-    '340bClaims': pioneerClaims.filter((row) => row.inventoryGroup === '340B').length,
-    rxClaims: pioneerClaims.filter((row) => row.inventoryGroup === 'RX').length,
+    '340bClaims': generalAnalyticsClaims.filter((row) => row.inventoryGroup === '340B').length,
+    rxClaims: generalAnalyticsClaims.filter((row) => row.inventoryGroup === 'RX').length,
     uploadedFiles: uploads.length,
     mtfRows: mtfClaims.filter((row) => row.sourceType === 'mtf').length,
     adjustmentRows: mtfClaims.filter((row) => row.sourceType === 'mtf_adjustment').length,
@@ -533,7 +534,8 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   };
 
   const pharmacyCards = PHARMACIES.map((pharmacy) => {
-    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInDateRange(row, startDate, endDate)));
+    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInMonth(row, reportingMonth)))
+      .filter((row) => claimYear(row) !== 2025);
     const inventory = db.inventoryRows.filter((row) => row.pharmacyCode === pharmacy.code);
     const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code && mtfInDateRange(row, startDate, endDate));
     return {
@@ -1141,9 +1143,9 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     referralChecks: compliance.filter((row) => /referral verification queue/i.test(row?.finding || '')).length
   };
 
-  const pairedFinancials = pioneerClaims.map((claim) => grossProfitTuple(claim, priceMaps)).filter(Boolean) as { remit:number; acquisition:number; grossProfit:number }[];
+  const pairedFinancials = generalAnalyticsClaims.map((claim) => grossProfitTuple(claim, priceMaps)).filter(Boolean) as { remit:number; acquisition:number; grossProfit:number }[];
   const financeByPharmacy = PHARMACIES.map((pharmacy) => {
-    const claims = pioneerClaims.filter((claim) => claim.pharmacyCode === pharmacy.code);
+    const claims = generalAnalyticsClaims.filter((claim) => claim.pharmacyCode === pharmacy.code);
     const pairs = claims.map((claim) => grossProfitTuple(claim, priceMaps)).filter(Boolean) as { remit:number; acquisition:number; grossProfit:number }[];
     const sdraRows = sdraResults.filter((row) => row.pharmacyCode === pharmacy.code);
     const flaggedActions = sdraRows.filter((row) => row.flagged).length
