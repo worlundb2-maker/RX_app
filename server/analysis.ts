@@ -41,6 +41,12 @@ function claimYear(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>) {
   return match ? Number(match[1]) : null;
 }
 
+function isSdraExpectedEligibleClaim(claim: PioneerClaim) {
+  return claim.payerType === 'Med D'
+    && sdraMap.has(cleanNdc(claim.ndc))
+    && claimYear(claim) !== 2025;
+}
+
 function normalizeIsoDate(value: string | null | undefined) {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value || ''));
   return match ? match[1] : null;
@@ -562,7 +568,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   }
 
   const usedMtfIds = new Set<string>();
-  const sdraClaims = pioneerClaims.filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+  const sdraClaims = pioneerClaims.filter((claim) => isSdraExpectedEligibleClaim(claim));
 
   const sdraResultsRaw = sdraClaims.map((claim) => {
     const candidateSets = [
@@ -667,7 +673,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   const sdraDashboardByPharmacy = PHARMACIES.map((pharmacy) => {
     const rows = sdraResults.filter((row) => row.claim.pharmacyCode === pharmacy.code);
     const count = (status: string) => rows.filter((row) => row.status === status).length;
-    const eligibleRxRows = pioneerClaims.filter((claim) => claim.pharmacyCode === pharmacy.code && claim.inventoryGroup === 'RX' && claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+    const eligibleRxRows = pioneerClaims.filter((claim) => claim.pharmacyCode === pharmacy.code && claim.inventoryGroup === 'RX' && isSdraExpectedEligibleClaim(claim));
     const flaggedRows = rows.filter((row) => row.flagged);
     return {
       id: pharmacy.code,
