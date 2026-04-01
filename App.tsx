@@ -24,6 +24,7 @@ type AppState = {
   sdraDashboardByPharmacy: any[];
   sdraResults: any[];
   sdraSummary: any;
+  iraYearComparison?: any[];
   unmatchedMtf: any[];
   claimsAnalysis: any[];
   claimsSummary: any;
@@ -108,11 +109,12 @@ const sectionColorMap: Record<Section, string> = {
 };
 
 export default function App() {
-  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; auth?: { hasUsers?: boolean; requiresSetup?: boolean }; inbox?: { folder?: string; examples?: string[] }} | null>(null);
+  const [bootstrap, setBootstrap] = useState<{pharmacies: Pharmacy[]; reportingMonths?: string[]; auth?: { hasUsers?: boolean; requiresSetup?: boolean }; inbox?: { folder?: string; examples?: string[] }} | null>(null);
   const [state, setState] = useState<AppState | null>(null);
   const [section, setSection] = useState<Section>('Dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [selectedPharmacy, setSelectedPharmacy] = useState('ALL');
+  const [selectedMonth, setSelectedMonth] = useState('ALL');
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
@@ -128,7 +130,10 @@ export default function App() {
   }
 
   async function loadState(pharmacyCode = selectedPharmacy) {
-    const query = pharmacyCode && pharmacyCode !== 'ALL' ? `?pharmacyCode=${pharmacyCode}` : '';
+    const params = new URLSearchParams();
+    if (pharmacyCode && pharmacyCode !== 'ALL') params.set('pharmacyCode', pharmacyCode);
+    if (selectedMonth && selectedMonth !== 'ALL') params.set('month', selectedMonth);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`/api/state${query}`);
     if (res.status === 401) {
       setUser(null);
@@ -155,7 +160,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     loadState(selectedPharmacy);
-  }, [selectedPharmacy, user]);
+  }, [selectedPharmacy, selectedMonth, user]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -477,6 +482,20 @@ export default function App() {
     { key: 'matchLevel', label: 'Match' },
   ];
 
+  const iraYearComparisonColumns: ColumnDef[] = [
+    { key: 'year', label: 'Year', type: 'number' },
+    { key: 'claimCount', label: 'IRA claims', type: 'number' },
+    { key: 'modeledClaims', label: 'Modeled', type: 'number' },
+    { key: 'totalAcquisition', label: 'Acquisition cost', type: 'currency' },
+    { key: 'totalRevenue', label: 'Total revenue', type: 'currency' },
+    { key: 'grossProfit', label: 'Gross profit', type: 'currency' },
+    { key: 'grossMargin', label: 'Gross margin', type: 'percent' },
+    { key: 'revenueDeltaVs2025', label: 'Revenue Δ vs 2025', type: 'currency' },
+    { key: 'grossProfitDeltaVs2025', label: 'GP Δ vs 2025', type: 'currency' },
+    { key: 'grossMarginDeltaVs2025', label: 'Margin Δ vs 2025', type: 'percent' },
+    { key: 'note', label: 'Note' },
+  ];
+
   const claimsColumns: ColumnDef[] = [
     { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional' },
     { key: 'ndc', label: 'NDC', compactPriority: 'secondary' },
@@ -593,6 +612,12 @@ export default function App() {
               <select value={selectedPharmacy} onChange={(e) => setSelectedPharmacy(e.target.value)}>
                 <option value="ALL">All pharmacies</option>
                 {bootstrap.pharmacies.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            )}
+            {user && (
+              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+                <option value="ALL">All months</option>
+                {(bootstrap.reportingMonths || []).map((month) => <option key={month} value={month}>{month}</option>)}
               </select>
             )}
             <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
@@ -835,6 +860,17 @@ export default function App() {
                 { label: 'Only 340B issues', onClick: () => setReportContext({ section: 'SDRA', filterText: '340B', flaggedOnly: true }), kind: 'secondary' },
                 { label: 'Only pending', onClick: () => setReportContext({ section: 'SDRA', filterText: 'Pending', flaggedOnly: false }), kind: 'secondary' },
               ]}
+            />
+            <ReportTable
+              title="IRA drug comparison (2025 vs 2026)"
+              description="Tracks acquisition cost, total revenue, and gross profit for IRA-drug Med D claims by year. 2025 is baseline-only and excluded from SDRA totals."
+              rows={state.iraYearComparison || []}
+              columns={iraYearComparisonColumns}
+              exportName="ira_2025_vs_2026_comparison"
+              groupByPharmacy={false}
+              renderDetails={(row) => <DetailTable details={row.details} />}
+              externalFilterText={visibleReportContext?.filterText}
+              externalFlaggedOnly={false}
             />
             <ReportTable title="SDRA reconciliation" description="Grouped by pharmacy, with claim-level drilldown into matched MTF rows, payment source, and variance." rows={state.sdraResults} columns={sdraColumns} exportName="sdra_reconciliation" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
