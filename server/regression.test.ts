@@ -420,7 +420,7 @@ test('staffing calculations exclude 2025 IRA-only claims and keep 4.5-day weight
   assert.equal(state.staffing.summary.overallAvgRxPerWeightedDay, 2);
 });
 
-test('date range filtering scopes dashboard and comparison outputs to selected range', () => {
+test('main date range filtering scopes dashboard outputs and 2026 ira comparison line', () => {
   const pioneerPath = writeWorkbook('pioneer-month-filter.xlsx', [
     { RxNumber: '9301', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
     { RxNumber: '9302', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 90, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
@@ -467,5 +467,5 @@ test('ira comparison supports an independent date range from the main reporting 
 
   assert.equal(state.kpi.pioneerClaims, 1);
   assert.equal(state.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 1);
-  assert.equal(state.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
+  assert.equal(state.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 1);
 });
