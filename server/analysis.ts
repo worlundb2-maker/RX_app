@@ -500,8 +500,8 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   const db = readDb();
   const startDate = filters?.startDate;
   const endDate = filters?.endDate;
-  const iraStartDate = filters?.iraStartDate ?? startDate;
-  const iraEndDate = filters?.iraEndDate ?? endDate;
+  const iraStartDate = filters?.iraStartDate;
+  const iraEndDate = filters?.iraEndDate;
 
   const scopedPioneerClaims = pharmacyCode ? db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.pioneerClaims;
   const pioneerClaimsAll = scopedPioneerClaims.filter((row) => claimInDateRange(row, startDate, endDate));
@@ -1284,10 +1284,16 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     byPharmacy: financeByPharmacy,
   };
 
-  const iraClaims = activeClaimsOnly(scopedPioneerClaims.filter((claim) => claimInDateRange(claim, iraStartDate, iraEndDate)))
+  const iraEligibleClaims = activeClaimsOnly(scopedPioneerClaims)
     .filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
   const iraComparisonBase = [2025, 2026].map((year) => {
-    const yearClaims = iraClaims.filter((claim) => claimYear(claim) === year);
+    const yearClaims = iraEligibleClaims.filter((claim) => {
+      if (claimYear(claim) !== year) return false;
+      if (year === 2025) {
+        return claimInDateRange(claim, iraStartDate ?? startDate, iraEndDate ?? endDate);
+      }
+      return claimInDateRange(claim, startDate, endDate);
+    });
     const claimPairs = yearClaims
       .map((claim) => ({ claim, tuple: grossProfitTuple(claim, priceMaps) }))
       .filter((row) => Boolean(row.tuple)) as Array<{ claim: PioneerClaim; tuple: { remit:number; acquisition:number; grossProfit:number } }>;
