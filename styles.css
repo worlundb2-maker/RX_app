@@ -486,7 +486,6 @@ th {
   font-size: 12px;
   border-radius: 8px;
 }
-.row-flagged { background: #2a2212; }
 .row-flagged {
   background: linear-gradient(
     90deg,
