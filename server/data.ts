@@ -27,6 +27,7 @@ const ENTITY_TABLES = [
   { table: 'uploads', path: 'uploads' },
   { table: 'inventory_rows', path: 'inventoryRows' },
   { table: 'price_rows', path: 'priceRows' },
+  { table: 'patient_assistance_rows', path: 'patientAssistanceRows' },
   { table: 'review_decisions', path: 'reviewDecisions' },
 ] as const;
 
@@ -39,6 +40,7 @@ function createDefaultDb(): AppDb {
     mtfClaims: [],
     inventoryRows: [],
     priceRows: [],
+    patientAssistanceRows: [],
     reviewDecisions: []
   };
 }
@@ -63,6 +65,7 @@ function normalizeDb(input: Partial<AppDb> | null | undefined): AppDb {
     mtfClaims: input?.mtfClaims ?? [],
     inventoryRows: input?.inventoryRows ?? [],
     priceRows: input?.priceRows ?? [],
+    patientAssistanceRows: input?.patientAssistanceRows ?? [],
     reviewDecisions: input?.reviewDecisions ?? [],
   };
 }
@@ -277,6 +280,7 @@ function readDbFromSqlite(): AppDb {
   `).trim() || '[]');
   const inventoryRows = JSON.parse(readJsonArrayFromTable('inventory_rows'));
   const priceRows = JSON.parse(readJsonArrayFromTable('price_rows'));
+  const patientAssistanceRows = JSON.parse(readJsonArrayFromTable('patient_assistance_rows'));
   const reviewDecisions = JSON.parse(readJsonArrayFromTable('review_decisions'));
 
   return normalizeDb({
@@ -287,6 +291,7 @@ function readDbFromSqlite(): AppDb {
     mtfClaims,
     inventoryRows,
     priceRows,
+    patientAssistanceRows,
     reviewDecisions,
   });
 }
@@ -526,6 +531,11 @@ function ensureSqlite(): boolean {
       payload TEXT NOT NULL,
       seq INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS patient_assistance_rows (
+      id TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      seq INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS review_decisions (
       id TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
@@ -675,6 +685,7 @@ export function clearDataset(dataset: UploadType | 'all') {
       ? []
       : db.priceRows.filter((x) => x.inventoryGroup !== (dataset === 'price_rx' ? 'RX' : '340B'));
   }
+  if (shouldClear('patient_assistance')) db.patientAssistanceRows = [];
   if (dataset === 'all') db.reviewDecisions = [];
 
   const remainingUploads = [] as typeof db.uploads;

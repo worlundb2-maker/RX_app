@@ -20,6 +20,7 @@ const inboxNamingExamples = [
   'MV_pioneer_claims_01012026to03202026.xlsx',
   'GLOBAL_price_rx_rx_prices.xlsx',
   'GLOBAL_price_340b_340b_prices.xlsx',
+  'GLOBAL_patient_assistance_plan.xlsx',
   'SEMINOLE__pioneer__claims.xlsx',
 ];
 
@@ -41,6 +42,8 @@ function detectInboxTypeFromTokens(tokens: string[]): UploadType | null {
     if (has('340b')) return 'price_340b';
     if (has('rx')) return 'price_rx';
   }
+  if (has('global') && has('patient') && has('assistance')) return 'patient_assistance';
+  if (has('assistance') && has('plan')) return 'patient_assistance';
 
   if (has('pioneer') && has('claims')) return 'pioneer';
   if (has('inventory') || has('onhand', 'onhands')) return 'inventory';
@@ -55,11 +58,11 @@ function detectInboxTypeFromTokens(tokens: string[]): UploadType | null {
 
 export function parseInboxAssignment(fileName: string): { type: UploadType; pharmacyCode?: PharmacyCode } | null {
   const baseName = path.basename(fileName);
-  const legacyMatch = /^(.*?)__(pioneer|mtf_adjustment|mtf|inventory|price_rx|price_340b)__(.+)$/i.exec(baseName);
+  const legacyMatch = /^(.*?)__(pioneer|mtf_adjustment|mtf|inventory|price_rx|price_340b|patient_assistance)__(.+)$/i.exec(baseName);
   if (legacyMatch) {
     const scope = String(legacyMatch[1] || '').trim();
     const type = legacyMatch[2].toLowerCase() as UploadType;
-    if (type === 'price_rx' || type === 'price_340b') return { type };
+    if (type === 'price_rx' || type === 'price_340b' || type === 'patient_assistance') return { type };
     const pharmacyCode = resolveInboxPharmacy(scope);
     return pharmacyCode ? { type, pharmacyCode } : null;
   }
@@ -74,7 +77,7 @@ export function parseInboxAssignment(fileName: string): { type: UploadType; phar
 
   const type = detectInboxTypeFromTokens(tokens);
   if (!type) return null;
-  if (type === 'price_rx' || type === 'price_340b') return { type };
+  if (type === 'price_rx' || type === 'price_340b' || type === 'patient_assistance') return { type };
 
   const pharmacyCode = resolveInboxPharmacy(tokens[0] || '');
   return pharmacyCode ? { type, pharmacyCode } : null;
