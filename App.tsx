@@ -618,8 +618,8 @@ export default function App() {
 
   const affordabilityColumns: ColumnDef[] = [
     { key: 'pharmacyName', label: 'Pharmacy' },
-    { key: 'claim.rxNumber', label: 'Rx', render: (row) => row.claim.rxNumber },
-    { key: 'claim.drugName', label: 'Drug', render: (row) => row.claim.drugName },
+    { key: 'claim.rxNumber', label: 'Rx', render: (row) => row.claim?.rxNumber || '' },
+    { key: 'claim.drugName', label: 'Drug', render: (row) => row.claim?.drugName || '' },
     { key: 'ndc', label: 'NDC' },
     { key: 'matchedPrograms', label: 'Assistance program(s)' },
     { key: 'patientPay', label: 'Patient Pay', type: 'currency' },

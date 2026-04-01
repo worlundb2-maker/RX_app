@@ -292,22 +292,33 @@ test('340B savings use WAC minus 340B acquisition cost on 340B claims only', () 
   assert.equal(state.b340SavingsSummary.totalSavings, 50);
 });
 
-test('patient assistance upload supports direct-to-patient affordability totals', () => {
+test('patient assistance upload supports amount charged intake and affordability totals include RX CASH 340B claims', () => {
   const pioneerPath = writeWorkbook('pioneer-affordability.xlsx', [
-    { RxNumber: 'A100', NDC: '22222-2222-22', FillDate: '2026-03-10', Quantity: 1, 'Days Supply': 30, PrimaryPayer: 'Commercial', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 40 },
+    { RxNumber: 'A100', NDC: '22222-2222-22', FillDate: '2026-03-10', Quantity: 1, 'Days Supply': 30, PrimaryPayer: 'RX CASH', InventoryGroup: '340B', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 40 },
     { RxNumber: 'A101', NDC: '22222-2222-22', FillDate: '2026-03-10', Quantity: 2, 'Days Supply': 30, PrimaryPayer: 'Commercial', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed', 'Patient Pay Amount': 25 },
   ]);
+  const inventoryPath = writeWorkbook('inventory-affordability.xlsx', [
+    { NDC: '22222-2222-22', Name: 'Affordability Drug', 'Inventory Group': '340B', 'Inventory On Hand': 10, 'Last Cost Paid': 3, 'Stock Size': 10, WAC: 10 },
+  ]);
+  const price340BPath = writeWorkbook('price-340b-affordability.xlsx', [
+    { NDC: '22222222222', ProperContractPrice: 3, SellDescription: 'Affordability Drug' },
+  ]);
   const assistancePath = writeWorkbook('patient-assistance.xlsx', [
-    { NDC: '22222-2222-22', 'Program Name': 'Brand Copay Card', 'Assistance Amount': 30, 'Assistance Basis': 'claim' },
+    { 'Program Name': 'Brand Copay Card', 'Amount Charged': 30, 'Assistance Basis': 'claim' },
   ]);
 
   ingestUpload(pioneerPath, 'pioneer');
+  ingestUpload(inventoryPath, 'inventory', 'SEMINOLE');
+  ingestUpload(price340BPath, 'price_340b');
   ingestUpload(assistancePath, 'patient_assistance');
 
   const state = getAppState();
   assert.equal(state.affordability.length, 2);
-  assert.equal(state.affordabilitySummary.totalAffordability, 55);
-  assert.equal(state.affordabilitySummary.residualExposure, 10);
+  assert.equal(state.affordabilitySummary.totalAffordability, 37);
+  assert.equal(state.affordabilitySummary.residualExposure, 33);
+  assert.equal(state.affordabilitySummary.uploadedPlans, 1);
+  const db = readDb();
+  assert.equal(db.patientAssistanceRows[0]?.ndc || '', '');
 });
 
 test('inbox filename parser assigns pharmacy and type for supported naming patterns', () => {
