@@ -1028,7 +1028,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   }).sort((a, b) => Number(b.flagged) - Number(a.flagged) || (b.sameGroupSavingsTotal || b.weightedSavingsTotal || 0) - (a.sameGroupSavingsTotal || a.weightedSavingsTotal || 0));
   const ndcOptimization = applyReviewDecisions(ndcOptimizationRaw, reviewDecisionMap);
 
-  const complianceRaw = pioneerClaims.flatMap((claim) => {
+  const complianceRaw = generalAnalyticsClaims.flatMap((claim) => {
     const prescriberCategory = (claim.prescriberCategory || '').toLowerCase();
     const diabeticSupply = /test strip|lancet|sensor|meter|cgms|dexcom|freestyle|pen needle|needle/i.test(claim.drugName);
     const medicaidClaim = isMedicaidClaim(claim);
@@ -1152,10 +1152,13 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
       const wacPerUnit = inventoryWac ?? priceWac;
       const acquisitionPerUnit = priceMaps.byGroupExact.get(`340B|${ndc}`)?.acquisitionCost ?? acquisitionForClaim(claim, priceMaps);
       const quantity = Number(claim.quantity || 0);
-      const savings = wacPerUnit != null && acquisitionPerUnit != null && quantity > 0
-        ? money((wacPerUnit - acquisitionPerUnit) * quantity)
+      const rawSavings = wacPerUnit != null && acquisitionPerUnit != null && quantity > 0
+        ? (wacPerUnit - acquisitionPerUnit) * quantity
         : null;
-      const flagged = savings != null && savings < 0;
+      const savings = rawSavings != null
+        ? money(Math.max(rawSavings, 0))
+        : null;
+      const flagged = rawSavings != null && rawSavings < 0;
       return {
         id: `${claim.pharmacyCode}|${claim.rxNumber}|${claim.fillNumber}|${ndc}|340b-savings`,
         pharmacyCode: claim.pharmacyCode,
@@ -1178,31 +1181,51 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     .sort((a, b) => Number(b.flagged) - Number(a.flagged) || (b.savings || 0) - (a.savings || 0));
   const b340Savings = applyReviewDecisions(b340SavingsRaw, reviewDecisionMap);
 
-  const assistanceByNdc = Object.values(groupBy(db.patientAssistanceRows, (row) => cleanNdc(row.ndc))).reduce<Record<string, { maxClaim: number; maxUnit: number; programs: string[] }>>((acc, group) => {
-    const ndc = cleanNdc(group[0]?.ndc);
-    const maxClaim = Math.max(0, ...group.filter((row) => row.assistanceBasis === 'claim').map((row) => Number(row.assistanceAmount || 0)));
-    const maxUnit = Math.max(0, ...group.filter((row) => row.assistanceBasis === 'unit').map((row) => Number(row.assistanceAmount || 0)));
-    acc[ndc] = { maxClaim, maxUnit, programs: group.map((row) => row.programName).filter(Boolean) };
-    return acc;
-  }, {});
+  const spreadsheetAffordabilityRowsRaw = db.patientAssistanceRows
+    .filter((row) => Number(row.amountCharged || 0) > 0)
+    .map((row) => {
+      const amountCharged = money(Math.max(Number(row.amountCharged || 0), 0));
+      return {
+        id: `${row.id}|spreadsheet-charged`,
+        pharmacyCode: 'ALL',
+        pharmacyName: 'Global patient assistance upload',
+        claim: null,
+        ndc: cleanNdc(row.ndc),
+        matchedPrograms: row.programName,
+        patientPay: amountCharged,
+        affordabilityApplied: amountCharged,
+        uncoveredAfterAssistance: 0,
+        flagged: false,
+        severity: 'low',
+        flagReason: null,
+        details: {
+          columns: ['Program', 'NDC', 'Charged amount', 'Sponsor', 'Notes'],
+          rows: [[row.programName, cleanNdc(row.ndc), money(amountCharged), row.sponsor || '', row.notes || '']]
+        }
+      };
+    });
 
-  const affordabilityRaw = pioneerClaims
-    .filter((claim) => assistanceByNdc[cleanNdc(claim.ndc)])
+  const rxCash340BAffordabilityRaw = generalAnalyticsClaims
+    .filter((claim) => claim.inventoryGroup === '340B' && claim.payerType === 'Cash')
     .map((claim) => {
       const ndc = cleanNdc(claim.ndc);
-      const assistance = assistanceByNdc[ndc];
       const quantity = Number(claim.quantity || 0);
-      const claimCap = (assistance?.maxClaim || 0) + ((assistance?.maxUnit || 0) * quantity);
+      const inventoryWac = db.inventoryRows.find((row) => row.pharmacyCode === claim.pharmacyCode && cleanNdc(row.ndc) === ndc)?.wac ?? null;
+      const priceWac = priceMaps.byGroupExact.get(`RX|${ndc}`)?.acquisitionCost ?? null;
+      const wacPerUnit = inventoryWac ?? priceWac;
+      const acquisitionPerUnit = priceMaps.byGroupExact.get(`340B|${ndc}`)?.acquisitionCost ?? acquisitionForClaim(claim, priceMaps);
+      const affordabilityApplied = wacPerUnit != null && acquisitionPerUnit != null && quantity > 0
+        ? money(Math.max((wacPerUnit - acquisitionPerUnit) * quantity, 0))
+        : 0;
       const patientPay = Math.max(Number(claim.patientPayAmount || 0), 0);
-      const affordabilityApplied = money(Math.min(patientPay, Math.max(claimCap, 0)));
       const uncoveredAfterAssistance = money(Math.max(patientPay - affordabilityApplied, 0));
       return {
-        id: `${claim.pharmacyCode}|${claim.rxNumber}|${claim.fillNumber}|${ndc}|affordability`,
+        id: `${claim.pharmacyCode}|${claim.rxNumber}|${claim.fillNumber}|${ndc}|affordability-rx-cash-340b`,
         pharmacyCode: claim.pharmacyCode,
         pharmacyName: pharmacyNameOf(claim.pharmacyCode),
         claim,
         ndc,
-        matchedPrograms: assistance.programs.join('; '),
+        matchedPrograms: 'RX CASH 340B WAC differential',
         patientPay,
         affordabilityApplied,
         uncoveredAfterAssistance,
@@ -1210,11 +1233,16 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
         severity: uncoveredAfterAssistance > 50 ? 'high' : uncoveredAfterAssistance > 20 ? 'medium' : 'low',
         flagReason: uncoveredAfterAssistance > 20 ? 'Residual patient cost after assistance' : null,
         details: {
-          columns: ['Rx', 'Drug', 'NDC', 'Programs', 'Patient Pay', 'Estimated Assistance', 'Residual', 'Fill Date'],
-          rows: [[claim.rxNumber, claim.drugName, ndc, assistance.programs.join('; '), money(patientPay), money(affordabilityApplied), money(uncoveredAfterAssistance), claim.fillDate || claim.claimDate || '']]
+          columns: ['Rx', 'Drug', 'NDC', 'Qty', 'WAC / Unit', '340B Cost / Unit', 'Affordability', 'Patient Pay', 'Residual', 'Fill Date'],
+          rows: [[claim.rxNumber, claim.drugName, ndc, quantity, wacPerUnit != null ? money(wacPerUnit) : '', acquisitionPerUnit != null ? money(acquisitionPerUnit) : '', money(affordabilityApplied), money(patientPay), money(uncoveredAfterAssistance), claim.fillDate || claim.claimDate || '']]
         }
       };
-    })
+    });
+
+  const affordabilityRaw = [
+    ...spreadsheetAffordabilityRowsRaw,
+    ...rxCash340BAffordabilityRaw,
+  ]
     .sort((a, b) => Number(b.flagged) - Number(a.flagged) || b.uncoveredAfterAssistance - a.uncoveredAfterAssistance);
   const affordability = applyReviewDecisions(affordabilityRaw, reviewDecisionMap);
 

@@ -129,6 +129,7 @@ export interface PatientAssistanceRow {
   ndc: string;
   programName: string;
   sponsor: string | null;
+  amountCharged: number | null;
   assistanceAmount: number;
   assistanceBasis: 'claim' | 'unit';
   notes: string | null;
