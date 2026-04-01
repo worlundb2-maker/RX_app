@@ -33,9 +33,7 @@ const ENTITY_TABLES = [
 function createDefaultDb(): AppDb {
   return {
     schemaVersion: SQLITE_SCHEMA_VERSION,
-    users: [
-      { id: randomUUID(), username: 'admin', password: 'admin', role: 'admin', displayName: 'Default Admin' }
-    ],
+    users: [],
     uploads: [],
     pioneerClaims: [],
     mtfClaims: [],
@@ -45,13 +43,21 @@ function createDefaultDb(): AppDb {
   };
 }
 
+function isLegacyDefaultUser(user: UserRecord | null | undefined) {
+  if (!user) return false;
+  return user.username === 'admin' && user.password === 'admin' && user.role === 'admin' && user.displayName === 'Default Admin';
+}
+
 function normalizeDb(input: Partial<AppDb> | null | undefined): AppDb {
   const fallback = createDefaultDb();
+  const inputUsers = Array.isArray(input?.users) ? input?.users : [];
+  const users = inputUsers.filter((user): user is UserRecord => Boolean(user && user.id && user.username && user.password && user.role && user.displayName));
+  const filteredUsers = users.filter((user) => !isLegacyDefaultUser(user));
   return {
     ...fallback,
     ...(input || {}),
     schemaVersion: SQLITE_SCHEMA_VERSION,
-    users: input?.users ?? fallback.users,
+    users: filteredUsers,
     uploads: input?.uploads ?? [],
     pioneerClaims: input?.pioneerClaims ?? [],
     mtfClaims: input?.mtfClaims ?? [],
@@ -685,6 +691,16 @@ export function clearDataset(dataset: UploadType | 'all') {
 
 export function addUser(user: Omit<UserRecord, 'id'>) {
   const db = readDb();
+  if (db.users.some((existing) => existing.username.toLowerCase() === user.username.toLowerCase())) {
+    throw new Error('Username already exists');
+  }
+  db.users.push({ ...user, id: randomUUID() });
+  writeDb(db);
+}
+
+export function addInitialUser(user: Omit<UserRecord, 'id'>) {
+  const db = readDb();
+  if (db.users.length) throw new Error('Initial user already exists');
   db.users.push({ ...user, id: randomUUID() });
   writeDb(db);
 }
@@ -701,4 +717,28 @@ export function setReviewDecision(targetKey: string, label: ReviewLabel | null) 
     });
   }
   writeDb(db);
+}
+
+function extractYearMonth(value: string | null | undefined) {
+  const raw = String(value || '');
+  const match = /^(\d{4}-\d{2})/.exec(raw);
+  return match ? match[1] : null;
+}
+
+export function listReportingMonths() {
+  const db = readDb();
+  const months = new Set<string>();
+  for (const claim of db.pioneerClaims) {
+    const month = extractYearMonth(claim.fillDate) || extractYearMonth(claim.claimDate);
+    if (month) months.add(month);
+  }
+  for (const claim of db.mtfClaims) {
+    const month = extractYearMonth(claim.serviceDate) || extractYearMonth(claim.receiptDate);
+    if (month) months.add(month);
+  }
+  for (const upload of db.uploads) {
+    const month = extractYearMonth(upload.uploadedAt);
+    if (month) months.add(month);
+  }
+  return Array.from(months).sort((a, b) => b.localeCompare(a));
 }
