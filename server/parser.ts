@@ -95,7 +95,7 @@ const HEADER_GROUPS: Record<UploadType, { groups: string[][]; minScore: number }
     minScore: 2,
     groups: [
       ['ndc', 'ndc11', 'drugndc'],
-      ['assistanceamount', 'copayassistance', 'supportamount', 'benefitamount', 'maxbenefit'],
+      ['assistanceamount', 'copayassistance', 'supportamount', 'benefitamount', 'maxbenefit', 'amountcharged', 'chargedamount', 'chargedtopatient'],
       ['programname', 'program', 'plan', 'assistanceplan'],
     ],
   },
@@ -390,7 +390,13 @@ function parsePriceRow(row: RowObject, group: InventoryGroup): PriceRow | null {
 
 function parsePatientAssistanceRow(row: RowObject): PatientAssistanceRow | null {
   const ndc = cleanNdc(findValue(row, ['NDC', 'NDC11', 'Drug NDC', 'Product NDC']));
-  if (!ndc) return null;
+  const amountCharged = asNumber(findValue(row, [
+    'Amount Charged',
+    'Charged Amount',
+    'Amount',
+    'Patient Charge',
+    'Charged To Patient',
+  ]));
   const assistanceAmount = asNumber(findValue(row, [
     'Assistance Amount',
     'Copay Assistance',
@@ -400,7 +406,8 @@ function parsePatientAssistanceRow(row: RowObject): PatientAssistanceRow | null 
     'Max Assistance',
     'Patient Savings',
   ]));
-  if (assistanceAmount == null || assistanceAmount <= 0) return null;
+  const normalizedAssistanceAmount = assistanceAmount ?? amountCharged;
+  if (normalizedAssistanceAmount == null || normalizedAssistanceAmount <= 0) return null;
   const programName = asText(findValue(row, ['Program Name', 'Program', 'Plan', 'Assistance Plan'])) || 'Patient assistance';
   const basisRaw = asText(findValue(row, ['Assistance Basis', 'Benefit Basis', 'Basis', 'Unit Basis'])).toLowerCase();
   const assistanceBasis = /unit|qty|quantity|each/.test(basisRaw) ? 'unit' : 'claim';
@@ -409,7 +416,8 @@ function parsePatientAssistanceRow(row: RowObject): PatientAssistanceRow | null 
     ndc,
     programName,
     sponsor: asText(findValue(row, ['Sponsor', 'Manufacturer', 'Payer', 'Vendor'])) || null,
-    assistanceAmount,
+    amountCharged,
+    assistanceAmount: normalizedAssistanceAmount,
     assistanceBasis,
     notes: asText(findValue(row, ['Notes', 'Comment', 'Details'])) || null,
   };
