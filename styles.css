@@ -436,6 +436,19 @@ th {
 .report-table-claims td[data-priority="primary"] {
   font-weight: 600;
 }
+.report-table-claims table {
+  table-layout: fixed;
+}
+.report-table-claims th,
+.report-table-claims td {
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.report-table-claims .sort-button {
+  white-space: normal;
+  text-align: left;
+}
 .report-table-claims td[data-priority="optional"],
 .report-table-claims th[data-priority="optional"] {
   display: none;

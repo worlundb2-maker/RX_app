@@ -497,17 +497,17 @@ export default function App() {
   ];
 
   const claimsColumns: ColumnDef[] = [
-    { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional' },
-    { key: 'ndc', label: 'NDC', compactPriority: 'secondary' },
-    { key: 'drugName', label: 'Drug', compactPriority: 'primary' },
-    { key: 'inventoryGroup', label: 'Group', compactPriority: 'secondary' },
-    { key: 'totalClaims', label: 'Claims', type: 'number', compactPriority: 'primary' },
-    { key: 'medDClaims', label: 'Med D', type: 'number', compactPriority: 'optional' },
-    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency', compactPriority: 'optional' },
-    { key: 'estimatedAcquisition', label: 'Est Acquisition', type: 'currency', compactPriority: 'optional' },
-    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency', compactPriority: 'primary' },
-    { key: 'opportunity', label: 'Opportunity', compactPriority: 'primary' },
-    { key: 'severity', label: 'Severity', compactPriority: 'primary' },
+    { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional', width: '120px' },
+    { key: 'ndc', label: 'NDC', compactPriority: 'secondary', width: '106px' },
+    { key: 'drugName', label: 'Drug', compactPriority: 'primary', width: '170px' },
+    { key: 'inventoryGroup', label: 'Group', compactPriority: 'secondary', width: '92px' },
+    { key: 'totalClaims', label: 'Claims', type: 'number', compactPriority: 'primary', width: '78px' },
+    { key: 'medDClaims', label: 'Med D', type: 'number', compactPriority: 'optional', width: '78px' },
+    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency', compactPriority: 'optional', width: '114px' },
+    { key: 'estimatedAcquisition', label: 'Est Acquisition', type: 'currency', compactPriority: 'optional', width: '128px' },
+    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency', compactPriority: 'primary', width: '116px' },
+    { key: 'opportunity', label: 'Opportunity', compactPriority: 'primary', width: '206px' },
+    { key: 'severity', label: 'Severity', compactPriority: 'primary', width: '124px' },
   ];
 
   const thirdPartyColumns: ColumnDef[] = [
