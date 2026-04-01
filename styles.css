@@ -447,8 +447,11 @@ th {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+.report-table-claims th {
+  white-space: nowrap;
+}
 .report-table-claims .sort-button {
-  white-space: normal;
+  white-space: nowrap;
   text-align: left;
 }
 .report-table-claims td[data-priority="optional"],
