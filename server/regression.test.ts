@@ -381,6 +381,26 @@ test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out
   assert.match(String(row2025?.note || ''), /excluded from SDRA totals/i);
 });
 
+test('sdra excludes baseline 2025 mtf rows from reconciliation and unmatched queues', () => {
+  const pioneerPath = writeWorkbook('pioneer-ira-mtf-baseline-exclusion.xlsx', [
+    { RxNumber: '9221', FillNum: '1', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, ICN: 'BASE-2025', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9222', FillNum: '1', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 120, ICN: 'ACTIVE-2026', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+  const mtfPath = writeWorkbook('mtf-ira-mtf-baseline-exclusion.xlsx', [
+    { RxNum: '9221', FillNum: '1', NDC: '00003089421', ICN: 'BASE-2025', SDRA: 49.68, 'MFR Payment Amount': 49.68, 'Service Date': '2025-05-01' },
+    { RxNum: '9222', FillNum: '1', NDC: '00003089421', ICN: 'ACTIVE-2026', SDRA: 49.68, 'MFR Payment Amount': 49.68, 'Service Date': '2026-05-01' },
+  ]);
+
+  ingestUpload(pioneerPath, 'pioneer');
+  ingestUpload(mtfPath, 'mtf');
+
+  const state = getAppState('SEMINOLE');
+
+  assert.equal(state.sdraResults.length, 1);
+  assert.equal(state.sdraResults[0]?.claim?.rxNumber, '9222');
+  assert.equal(state.unmatchedMtf.length, 0);
+});
+
 test('staffing calculations exclude 2025 IRA-only claims and keep 4.5-day weighting on active years', () => {
   const pioneerPath = writeWorkbook('pioneer-staffing-ira-year-filter.xlsx', [
     { RxNumber: '9251', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
