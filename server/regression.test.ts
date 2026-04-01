@@ -381,6 +381,22 @@ test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out
   assert.match(String(row2025?.note || ''), /excluded from SDRA totals/i);
 });
 
+test('sdra expected-payment eligibility excludes 2025 claims from summary and detail rows', () => {
+  const pioneerPath = writeWorkbook('pioneer-sdra-2025-eligibility.xlsx', [
+    { RxNumber: '9261', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9262', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+
+  ingestUpload(pioneerPath, 'pioneer');
+
+  const state = getAppState('SEMINOLE');
+  const sdraRxNumbers = state.sdraResults.map((row) => row.claim.rxNumber);
+  const seminoleSummary = state.sdraDashboardByPharmacy.find((row) => row.pharmacyCode === 'SEMINOLE');
+
+  assert.deepEqual(sdraRxNumbers, ['9262']);
+  assert.equal(seminoleSummary?.eligibleClaims, 1);
+});
+
 test('staffing calculations exclude 2025 IRA-only claims and keep 4.5-day weighting on active years', () => {
   const pioneerPath = writeWorkbook('pioneer-staffing-ira-year-filter.xlsx', [
     { RxNumber: '9251', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
