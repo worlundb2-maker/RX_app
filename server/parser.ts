@@ -26,6 +26,8 @@ type SheetSpec = ParseMeta & {
   rows: any[][];
 };
 
+const normalizedRowCache = new WeakMap<RowObject, Map<string, any>>();
+
 const HEADER_GROUPS: Record<UploadType, { groups: string[][]; minScore: number }> = {
   pioneer: {
     minScore: 4,
@@ -102,18 +104,18 @@ function asHeaderArray(row: any[]): string[] {
   return row.map((value) => String(value ?? '').trim()).filter((value) => value !== '');
 }
 
-function headerMatches(headers: string[], alias: string): boolean {
-  const normalizedAlias = normalizeKey(alias);
-  return headers.some((header) => {
-    const normalizedHeader = normalizeKey(header);
-    return normalizedHeader === normalizedAlias || normalizedHeader.includes(normalizedAlias) || normalizedAlias.includes(normalizedHeader);
-  });
-}
-
 function headerScore(headers: string[], type: UploadType): number {
   const normalizedHeaders = headers.map((header) => normalizeKey(header)).filter(Boolean);
+  const normalizedHeaderSet = new Set(normalizedHeaders);
   const groups = HEADER_GROUPS[type].groups;
-  return groups.reduce((score, aliases) => score + (aliases.some((alias) => headerMatches(normalizedHeaders, alias)) ? 1 : 0), 0);
+  return groups.reduce((score, aliases) => {
+    const matched = aliases.some((alias) => {
+      const normalizedAlias = normalizeKey(alias);
+      if (normalizedHeaderSet.has(normalizedAlias)) return true;
+      return normalizedHeaders.some((header) => header.includes(normalizedAlias) || normalizedAlias.includes(header));
+    });
+    return score + (matched ? 1 : 0);
+  }, 0);
 }
 
 function countSourceRows(rows: any[][], headerIndex: number): number {
@@ -171,8 +173,11 @@ function pickBestSheet(workbooks: xlsx.WorkBook[], type: UploadType): SheetSpec 
 }
 
 function valueMap(row: RowObject) {
+  const cached = normalizedRowCache.get(row);
+  if (cached) return cached;
   const out = new Map<string, any>();
   for (const [key, value] of Object.entries(row)) out.set(normalizeKey(key), value);
+  normalizedRowCache.set(row, out);
   return out;
 }
 
