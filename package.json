@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build && npm run start",
-    "build": "vite build",
+    "build": "node scripts/run-vite.mjs build",
     "start": "tsx server/index.ts --production",
     "check": "tsc --noEmit",
     "test:regression": "node --test --import tsx server/regression.test.ts",
