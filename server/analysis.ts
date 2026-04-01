@@ -549,10 +549,26 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
     };
   });
 
+  const baselineSdraClaims2025 = pioneerClaims.filter((claim) =>
+    claimYear(claim) === 2025
+    && claim.payerType === 'Med D'
+    && sdraMap.has(cleanNdc(claim.ndc))
+  );
+  const baselineClaimExactKeys = new Set(baselineSdraClaims2025.map((claim) => claimKey(claim)));
+  const baselineClaimRxFillKeys = new Set(baselineSdraClaims2025.map((claim) => rxFillKey(claim.pharmacyCode, claim.rxNumber, claim.fillNumber)));
+  const baselineClaimRxOnlyKeys = new Set(baselineSdraClaims2025.map((claim) => rxOnlyKey(claim.pharmacyCode, claim.rxNumber)));
+
+  const isBaseline2025MtfRow = (row: MtfClaim) =>
+    baselineClaimExactKeys.has(paymentKey(row))
+    || baselineClaimRxFillKeys.has(rxFillKey(row.pharmacyCode, row.rxNumber, row.fillNumber))
+    || baselineClaimRxOnlyKeys.has(rxOnlyKey(row.pharmacyCode, row.rxNumber));
+
+  const mtfClaimsForSdra = mtfClaims.filter((row) => !isBaseline2025MtfRow(row));
+
   const mtfByExact = new Map<string, MtfClaim[]>();
   const mtfByRxFill = new Map<string, MtfClaim[]>();
   const mtfByRxOnly = new Map<string, MtfClaim[]>();
-  for (const row of mtfClaims) {
+  for (const row of mtfClaimsForSdra) {
     if (!mtfByExact.has(paymentKey(row))) mtfByExact.set(paymentKey(row), []);
     mtfByExact.get(paymentKey(row))!.push(row);
     if (!mtfByRxFill.has(rxFillKey(row.pharmacyCode, row.rxNumber, row.fillNumber))) mtfByRxFill.set(rxFillKey(row.pharmacyCode, row.rxNumber, row.fillNumber), []);
@@ -562,7 +578,11 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   }
 
   const usedMtfIds = new Set<string>();
-  const sdraClaims = pioneerClaims.filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+  const sdraClaims = pioneerClaims.filter((claim) =>
+    claimYear(claim) !== 2025
+    && claim.payerType === 'Med D'
+    && sdraMap.has(cleanNdc(claim.ndc))
+  );
 
   const sdraResultsRaw = sdraClaims.map((claim) => {
     const candidateSets = [
@@ -644,7 +664,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   }).sort((a, b) => Number(b.flagged) - Number(a.flagged) || Math.abs(b.variance) - Math.abs(a.variance) || b.expected - a.expected);
   const sdraResults = applyReviewDecisions(sdraResultsRaw, reviewDecisionMap);
 
-  const unmatchedMtfRaw = mtfClaims
+  const unmatchedMtfRaw = mtfClaimsForSdra
     .filter((row) => !usedMtfIds.has(row.id))
     .map((row) => ({
       id: row.id,
@@ -667,7 +687,13 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   const sdraDashboardByPharmacy = PHARMACIES.map((pharmacy) => {
     const rows = sdraResults.filter((row) => row.claim.pharmacyCode === pharmacy.code);
     const count = (status: string) => rows.filter((row) => row.status === status).length;
-    const eligibleRxRows = pioneerClaims.filter((claim) => claim.pharmacyCode === pharmacy.code && claim.inventoryGroup === 'RX' && claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+    const eligibleRxRows = pioneerClaims.filter((claim) =>
+      claim.pharmacyCode === pharmacy.code
+      && claimYear(claim) !== 2025
+      && claim.inventoryGroup === 'RX'
+      && claim.payerType === 'Med D'
+      && sdraMap.has(cleanNdc(claim.ndc))
+    );
     const flaggedRows = rows.filter((row) => row.flagged);
     return {
       id: pharmacy.code,
