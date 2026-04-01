@@ -1345,10 +1345,12 @@ function summarizeGroup(rows: any[], columns: ColumnDef[]) {
   const manualLabels = rows.filter((row) => row.manualLabel).length;
   const numericColumns = columns.filter((column) => column.type === 'currency' || column.type === 'number');
   const highlights = numericColumns.slice(0, 2).map((column) => {
-    const total = rows.reduce((sum, row) => {
-      const value = Number(cellValue(row, column));
-      return Number.isFinite(value) ? sum + value : sum;
-    }, 0);
+    const values = rows.map((row) => Number(cellValue(row, column))).filter((value) => Number.isFinite(value));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (column.key === 'daysOnHand') {
+      const average = values.length ? (total / values.length) : 0;
+      return `${column.label}: ${formatCell(Number(average.toFixed(1)), column.type)}`;
+    }
     return `${column.label}: ${formatCell(total, column.type)}`;
   });
   return { flagged, manualLabels, totalRows: rows.length, highlights };
