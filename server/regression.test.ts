@@ -299,3 +299,48 @@ test('MV and Monte Vista aliases resolve to the same fixed pharmacy mapping', ()
   assert.equal(byName?.code, 'MONTE_VISTA');
   assert.equal(byAlias?.color, byName?.color);
 });
+
+test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out of sdra totals', () => {
+  const pioneerPath = writeWorkbook('pioneer-ira-compare.xlsx', [
+    { RxNumber: '9201', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9202', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 80, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+  const pricePath = writeWorkbook('price-ira-compare.xlsx', [
+    { NDC: '00003089421', ProperContractPrice: 5, SellDescription: 'IRA Drug', GCN: 'GCN-IRA' },
+  ]);
+
+  ingestUpload(pricePath, 'price_rx');
+  ingestUpload(pioneerPath, 'pioneer');
+
+  const state = getAppState('SEMINOLE');
+  const row2025 = state.iraYearComparison.find((row) => row.year === 2025);
+  const row2026 = state.iraYearComparison.find((row) => row.year === 2026);
+
+  assert.equal(row2025?.totalRevenue, 100);
+  assert.equal(row2026?.totalRevenue, 80);
+  assert.equal(row2026?.revenueDeltaVs2025, -20);
+  assert.equal(row2026?.grossProfitDeltaVs2025, -20);
+  assert.match(String(row2025?.note || ''), /excluded from SDRA totals/i);
+});
+
+test('month filtering scopes dashboard and comparison outputs to selected month', () => {
+  const pioneerPath = writeWorkbook('pioneer-month-filter.xlsx', [
+    { RxNumber: '9301', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9302', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 90, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+  const pricePath = writeWorkbook('price-month-filter.xlsx', [
+    { NDC: '00003089421', ProperContractPrice: 5, SellDescription: 'IRA Drug', GCN: 'GCN-IRA' },
+  ]);
+  ingestUpload(pricePath, 'price_rx');
+  ingestUpload(pioneerPath, 'pioneer');
+
+  const may2025 = getAppState('SEMINOLE', '2025-05');
+  const may2026 = getAppState('SEMINOLE', '2026-05');
+
+  assert.equal(may2025.kpi.pioneerClaims, 1);
+  assert.equal(may2026.kpi.pioneerClaims, 1);
+  assert.equal(may2025.financeSummary.recordedRevenue, 100);
+  assert.equal(may2026.financeSummary.recordedRevenue, 90);
+  assert.equal(may2025.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
+  assert.equal(may2026.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 0);
+});

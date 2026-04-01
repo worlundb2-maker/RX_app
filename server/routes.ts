@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { addInitialUser, addUser, clearDataset, ingestInboxDir, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
+import { addInitialUser, addUser, clearDataset, ingestInboxDir, listReportingMonths, PHARMACIES, pharmacyByCode, readDb, saveUpload, setReviewDecision } from './data';
 import { ingestUpload } from './parser';
 import { getAppState } from './analysis';
 import { getAppDataDir } from './paths';
@@ -180,6 +180,7 @@ export function registerRoutes(app: express.Express) {
     const hasUsers = readDb().users.length > 0;
     res.json({
       pharmacies: PHARMACIES,
+      reportingMonths: listReportingMonths(),
       auth: {
         hasUsers,
         requiresSetup: !hasUsers,
@@ -193,7 +194,10 @@ export function registerRoutes(app: express.Express) {
 
   app.get('/api/state', requireAuth, (req, res) => {
     const pharmacyCode = typeof req.query.pharmacyCode === 'string' && req.query.pharmacyCode !== 'ALL' ? req.query.pharmacyCode as PharmacyCode : undefined;
-    res.json(getAppState(pharmacyCode));
+    const reportingMonth = typeof req.query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month)
+      ? req.query.month
+      : undefined;
+    res.json(getAppState(pharmacyCode, reportingMonth));
   });
 
   app.post('/api/login', (req, res) => {

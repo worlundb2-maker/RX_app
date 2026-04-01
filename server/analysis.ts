@@ -35,6 +35,27 @@ function money(value: number) {
   return Number(value.toFixed(2));
 }
 
+function claimYear(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>) {
+  const candidate = String(claim.fillDate || claim.claimDate || '');
+  const match = /^(\d{4})/.exec(candidate);
+  return match ? Number(match[1]) : null;
+}
+
+function yearMonth(value: string | null | undefined) {
+  const match = /^(\d{4}-\d{2})/.exec(String(value || ''));
+  return match ? match[1] : null;
+}
+
+function claimInMonth(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>, month?: string) {
+  if (!month) return true;
+  return yearMonth(claim.fillDate) === month || yearMonth(claim.claimDate) === month;
+}
+
+function mtfInMonth(claim: Pick<MtfClaim, 'serviceDate' | 'receiptDate'>, month?: string) {
+  if (!month) return true;
+  return yearMonth(claim.serviceDate) === month || yearMonth(claim.receiptDate) === month;
+}
+
 function cleanNdc(ndc: string | null | undefined) {
   return String(ndc || '').replace(/[^0-9]/g, '');
 }
@@ -464,13 +485,16 @@ function buildPriceMaps(priceRows: PriceRow[]) {
   return { byGroupExact, byAnyExact, byGroupFamily, weightedFamily };
 }
 
-export function getAppState(pharmacyCode?: PharmacyCode) {
+export function getAppState(pharmacyCode?: PharmacyCode, reportingMonth?: string) {
   const db = readDb();
-  const pioneerClaimsAll = pharmacyCode ? db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.pioneerClaims;
+  const scopedPioneerClaims = pharmacyCode ? db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.pioneerClaims;
+  const pioneerClaimsAll = scopedPioneerClaims.filter((row) => claimInMonth(row, reportingMonth));
   const pioneerClaims = activeClaimsOnly(pioneerClaimsAll);
-  const mtfClaims = pharmacyCode ? db.mtfClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.mtfClaims;
+  const scopedMtfClaims = pharmacyCode ? db.mtfClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.mtfClaims;
+  const mtfClaims = scopedMtfClaims.filter((row) => mtfInMonth(row, reportingMonth));
   const inventoryRows = pharmacyCode ? db.inventoryRows.filter((row) => row.pharmacyCode === pharmacyCode) : db.inventoryRows;
   const priceRows = db.priceRows;
+  const uploads = db.uploads.filter((row) => !reportingMonth || yearMonth(row.uploadedAt) === reportingMonth);
 
   const priceMaps = buildPriceMaps(priceRows);
   const pendingCutoff = recentWindowCutoff(pioneerClaims);
@@ -486,16 +510,16 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     totalInventoryValue: money(sum(inventoryRows.map((row) => Math.max(row.onHand, 0) * Number(row.lastCostPaid || 0)))),
     '340bClaims': pioneerClaims.filter((row) => row.inventoryGroup === '340B').length,
     rxClaims: pioneerClaims.filter((row) => row.inventoryGroup === 'RX').length,
-    uploadedFiles: db.uploads.length,
+    uploadedFiles: uploads.length,
     mtfRows: mtfClaims.filter((row) => row.sourceType === 'mtf').length,
     adjustmentRows: mtfClaims.filter((row) => row.sourceType === 'mtf_adjustment').length,
     priceRows: priceRows.length
   };
 
   const pharmacyCards = PHARMACIES.map((pharmacy) => {
-    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code));
+    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInMonth(row, reportingMonth)));
     const inventory = db.inventoryRows.filter((row) => row.pharmacyCode === pharmacy.code);
-    const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code);
+    const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code && mtfInMonth(row, reportingMonth));
     return {
       ...pharmacy,
       claimCount: claims.length,
@@ -1157,6 +1181,50 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     byPharmacy: financeByPharmacy,
   };
 
+  const iraClaims = pioneerClaims.filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+  const iraComparisonBase = [2025, 2026].map((year) => {
+    const yearClaims = iraClaims.filter((claim) => claimYear(claim) === year);
+    const claimPairs = yearClaims
+      .map((claim) => ({ claim, tuple: grossProfitTuple(claim, priceMaps) }))
+      .filter((row) => Boolean(row.tuple)) as Array<{ claim: PioneerClaim; tuple: { remit:number; acquisition:number; grossProfit:number } }>;
+    const totalRevenue = money(sum(claimPairs.map((row) => row.tuple.remit)));
+    const totalAcquisition = money(sum(claimPairs.map((row) => row.tuple.acquisition)));
+    const grossProfit = money(sum(claimPairs.map((row) => row.tuple.grossProfit)));
+    return {
+      id: `ira-comparison-${year}`,
+      year,
+      claimCount: yearClaims.length,
+      modeledClaims: claimPairs.length,
+      totalRevenue,
+      totalAcquisition,
+      grossProfit,
+      grossMargin: percent(grossProfit, totalRevenue),
+      note: year === 2025
+        ? '2025 IRA claims are baseline only and excluded from SDRA totals.'
+        : '2026 IRA claims are compared against 2025 baseline.',
+      details: {
+        columns: ['Fill date', 'Claim date', 'Pharmacy', 'Rx', 'Drug', 'Revenue', 'Acquisition', 'Gross profit'],
+        rows: claimPairs.map((row) => [
+          row.claim.fillDate || '',
+          row.claim.claimDate || '',
+          row.claim.pharmacyName || row.claim.pharmacyCode,
+          row.claim.rxNumber,
+          row.claim.drugName,
+          money(row.tuple.remit),
+          money(row.tuple.acquisition),
+          money(row.tuple.grossProfit),
+        ])
+      }
+    };
+  });
+  const baseline2025 = iraComparisonBase.find((row) => row.year === 2025);
+  const iraYearComparison = iraComparisonBase.map((row) => ({
+    ...row,
+    revenueDeltaVs2025: !baseline2025 || row.year === 2025 ? 0 : money((row.totalRevenue || 0) - (baseline2025.totalRevenue || 0)),
+    grossProfitDeltaVs2025: !baseline2025 || row.year === 2025 ? 0 : money((row.grossProfit || 0) - (baseline2025.grossProfit || 0)),
+    grossMarginDeltaVs2025: !baseline2025 || row.year === 2025 ? 0 : Number(((row.grossMargin || 0) - (baseline2025.grossMargin || 0)).toFixed(4)),
+  }));
+
   const staffing = buildStaffingState(pioneerClaims);
 
   const pharmacyCardsEnhanced = pharmacyCards.map((card) => ({
@@ -1173,6 +1241,7 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     sdraDashboardByPharmacy,
     sdraResults,
     sdraSummary,
+    iraYearComparison,
     unmatchedMtf,
     claimsAnalysis,
     claimsSummary,
@@ -1185,7 +1254,7 @@ export function getAppState(pharmacyCode?: PharmacyCode) {
     ndcSummary,
     compliance,
     complianceSummary,
-    uploads: db.uploads,
+    uploads,
     users: db.users
   };
 }

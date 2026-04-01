@@ -718,3 +718,27 @@ export function setReviewDecision(targetKey: string, label: ReviewLabel | null) 
   }
   writeDb(db);
 }
+
+function extractYearMonth(value: string | null | undefined) {
+  const raw = String(value || '');
+  const match = /^(\d{4}-\d{2})/.exec(raw);
+  return match ? match[1] : null;
+}
+
+export function listReportingMonths() {
+  const db = readDb();
+  const months = new Set<string>();
+  for (const claim of db.pioneerClaims) {
+    const month = extractYearMonth(claim.fillDate) || extractYearMonth(claim.claimDate);
+    if (month) months.add(month);
+  }
+  for (const claim of db.mtfClaims) {
+    const month = extractYearMonth(claim.serviceDate) || extractYearMonth(claim.receiptDate);
+    if (month) months.add(month);
+  }
+  for (const upload of db.uploads) {
+    const month = extractYearMonth(upload.uploadedAt);
+    if (month) months.add(month);
+  }
+  return Array.from(months).sort((a, b) => b.localeCompare(a));
+}
