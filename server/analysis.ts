@@ -534,7 +534,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?:
   };
 
   const pharmacyCards = PHARMACIES.map((pharmacy) => {
-    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInMonth(row, reportingMonth)))
+    const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInDateRange(row, startDate, endDate)))
       .filter((row) => claimYear(row) !== 2025);
     const inventory = db.inventoryRows.filter((row) => row.pharmacyCode === pharmacy.code);
     const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code && mtfInDateRange(row, startDate, endDate));
