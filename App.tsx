@@ -76,8 +76,8 @@ type OverviewAction = {
   kind?: 'primary' | 'secondary';
 };
 
-const sections = ['Dashboard', 'Uploads', 'SDRA', 'Claims', 'Third Party', 'Inventory', 'NDC', '340B', 'Staffing', 'Users'] as const;
-type Section = (typeof sections)[number];
+const allSections = ['Dashboard', 'Uploads', 'SDRA', 'Claims', 'Third Party', 'Inventory', 'NDC', '340B', 'Staffing', 'Users'] as const;
+type Section = (typeof allSections)[number];
 const pharmacyOrder = ['KONAWA', 'MONTE_VISTA', 'ARLINGTON', 'SEMINOLE'];
 const pharmacyColorMap: Record<string, string> = {
   KONAWA: '#eab308',
@@ -124,6 +124,9 @@ export default function App() {
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
+  const visibleSections = user?.role === 'admin'
+    ? allSections
+    : allSections.filter((name) => name !== 'Users');
 
   function isGlobalUpload(type: UploadType) {
     return type === 'price_rx' || type === 'price_340b';
@@ -161,6 +164,10 @@ export default function App() {
     if (!user) return;
     loadState(selectedPharmacy);
   }, [selectedPharmacy, selectedMonth, user]);
+
+  useEffect(() => {
+    if (section === 'Users' && user?.role !== 'admin') setSection('Dashboard');
+  }, [section, user]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -629,7 +636,7 @@ export default function App() {
 
         <>
         <div className="tabs card">
-          {sections.map((s) => (
+          {visibleSections.map((s) => (
             <button key={s} className={`tab ${section === s ? 'active' : ''}`} style={section === s ? { borderColor: sectionColorMap[s], background: `${sectionColorMap[s]}14`, color: sectionColorMap[s] } : undefined} onClick={() => setSection(s)}>
               {s}
             </button>

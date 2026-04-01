@@ -176,6 +176,12 @@ export function registerRoutes(app: express.Express) {
     next();
   }
 
+  function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const user = (req as any).user;
+    if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Admin role required' });
+    next();
+  }
+
   app.get('/api/bootstrap', (_req, res) => {
     const hasUsers = readDb().users.length > 0;
     res.json({
@@ -240,7 +246,7 @@ export function registerRoutes(app: express.Express) {
     res.json({ ok: true });
   });
 
-  app.post('/api/users', requireAuth, express.json(), (req, res) => {
+  app.post('/api/users', requireAuth, requireAdmin, express.json(), (req, res) => {
     const username = sanitizeCredentialText(req.body?.username);
     const password = sanitizeCredentialText(req.body?.password);
     const displayName = sanitizeCredentialText(req.body?.displayName);
