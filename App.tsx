@@ -114,13 +114,16 @@ export default function App() {
   const [section, setSection] = useState<Section>('Dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [selectedPharmacy, setSelectedPharmacy] = useState('ALL');
-  const [selectedMonth, setSelectedMonth] = useState('ALL');
-  const [timeView, setTimeView] = useState<'combined' | 'month_by_month'>('combined');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [iraStartDate, setIraStartDate] = useState('');
+  const [iraEndDate, setIraEndDate] = useState('');
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
   const [setupForm, setSetupForm] = useState({ username: '', password: '', displayName: '' });
+  const [authBusy, setAuthBusy] = useState(false);
   const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
@@ -136,7 +139,10 @@ export default function App() {
   async function loadState(pharmacyCode = selectedPharmacy) {
     const params = new URLSearchParams();
     if (pharmacyCode && pharmacyCode !== 'ALL') params.set('pharmacyCode', pharmacyCode);
-    if (selectedMonth && selectedMonth !== 'ALL') params.set('month', selectedMonth);
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    if (iraStartDate) params.set('iraStartDate', iraStartDate);
+    if (iraEndDate) params.set('iraEndDate', iraEndDate);
     const query = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`/api/state${query}`);
     if (res.status === 401) {
@@ -164,7 +170,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     loadState(selectedPharmacy);
-  }, [selectedPharmacy, selectedMonth, user]);
+  }, [selectedPharmacy, startDate, endDate, iraStartDate, iraEndDate, user]);
 
   useEffect(() => {
     if (section === 'Users' && user?.role !== 'admin') setSection('Dashboard');
@@ -172,12 +178,22 @@ export default function App() {
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
+    if (authBusy) return;
+    setAuthBusy(true);
     const fd = new FormData(e.target as HTMLFormElement);
-    const res = await fetch('/api/login', { method: 'POST', body: new URLSearchParams(fd as any) });
-    const data = await res.json();
-    if (!res.ok) return setMessage(data.message || 'Login failed');
-    setUser(data.user);
-    setMessage('Logged in');
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        body: new URLSearchParams(fd as any),
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) return setMessage(data.message || 'Login failed');
+      setUser(data.user);
+      setMessage('Logged in');
+    } finally {
+      setAuthBusy(false);
+    }
   }
 
   async function setupAdmin(e: React.FormEvent) {
@@ -286,12 +302,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function logout() {
-    fetch('/api/logout', { method: 'POST' }).catch(() => null);
-    setUser(null);
-    setState(null);
-    setSection('Dashboard');
-    setMessage('Logged out');
+  async function logout() {
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // ignore transient network errors, and still clear local auth state
+    } finally {
+      setUser(null);
+      setState(null);
+      setSection('Dashboard');
+      setMessage('Logged out');
+      setAuthBusy(false);
+    }
   }
 
   function addManualStaffEntry(e: React.FormEvent) {
@@ -447,7 +471,7 @@ export default function App() {
               <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
                 <input name="username" placeholder="Username" autoComplete="username" />
                 <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
-                <button className="primary" type="submit">Log in</button>
+                <button className="primary" type="submit" disabled={authBusy}>{authBusy ? 'Working…' : 'Log in'}</button>
               </form>
             )}
           </div>
@@ -604,17 +628,6 @@ export default function App() {
 
   const uploadCounts = countBy(state.uploads, (row) => row.type);
   const staffingSummary = state.staffing?.summary || {};
-  const reportingMonths = bootstrap.reportingMonths || [];
-  const selectedMonthIndex = reportingMonths.findIndex((month) => month === selectedMonth);
-
-  function moveMonth(offset: number) {
-    if (!reportingMonths.length || selectedMonth === 'ALL') return;
-    const current = reportingMonths.findIndex((month) => month === selectedMonth);
-    if (current < 0) return;
-    const next = current + offset;
-    if (next < 0 || next >= reportingMonths.length) return;
-    setSelectedMonth(reportingMonths[next]);
-  }
 
   return (
     <div className="app-shell">
@@ -634,29 +647,21 @@ export default function App() {
               </select>
             )}
             {user && (
-              <select value={timeView} onChange={(e) => {
-                const nextView = e.target.value as 'combined' | 'month_by_month';
-                setTimeView(nextView);
-                if (nextView === 'combined') setSelectedMonth('ALL');
-              }}>
-                <option value="combined">Combined view</option>
-                <option value="month_by_month">Month-by-month view</option>
-              </select>
-            )}
-            {user && (
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-                {timeView === 'combined' && <option value="ALL">All months</option>}
-                {reportingMonths.map((month) => <option key={month} value={month}>{month}</option>)}
-              </select>
-            )}
-            {user && timeView === 'month_by_month' && (
               <>
-                <button className="secondary" type="button" onClick={() => moveMonth(1)} disabled={selectedMonthIndex < 0 || selectedMonthIndex >= reportingMonths.length - 1}>Older</button>
-                <button className="secondary" type="button" onClick={() => moveMonth(-1)} disabled={selectedMonthIndex <= 0}>Newer</button>
+                <label className="date-range-control">
+                  <span>Main range</span>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Main start date" />
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} aria-label="Main end date" />
+                </label>
+                <label className="date-range-control">
+                  <span>IRA 2025 comparison range</span>
+                  <input type="date" value={iraStartDate} onChange={(e) => setIraStartDate(e.target.value)} aria-label="IRA comparison start date" />
+                  <input type="date" value={iraEndDate} onChange={(e) => setIraEndDate(e.target.value)} aria-label="IRA comparison end date" />
+                </label>
               </>
             )}
             <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
-            {user && <button className="secondary" type="button" onClick={logout}>Log out</button>}
+            {user && <button className="secondary" type="button" onClick={logout} disabled={authBusy}>{authBusy ? 'Working…' : 'Log out'}</button>}
           </div>
         </header>
 
@@ -1345,10 +1350,12 @@ function summarizeGroup(rows: any[], columns: ColumnDef[]) {
   const manualLabels = rows.filter((row) => row.manualLabel).length;
   const numericColumns = columns.filter((column) => column.type === 'currency' || column.type === 'number');
   const highlights = numericColumns.slice(0, 2).map((column) => {
-    const total = rows.reduce((sum, row) => {
-      const value = Number(cellValue(row, column));
-      return Number.isFinite(value) ? sum + value : sum;
-    }, 0);
+    const values = rows.map((row) => Number(cellValue(row, column))).filter((value) => Number.isFinite(value));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (column.key === 'daysOnHand') {
+      const average = values.length ? (total / values.length) : 0;
+      return `${column.label}: ${formatCell(Number(average.toFixed(1)), column.type)}`;
+    }
     return `${column.label}: ${formatCell(total, column.type)}`;
   });
   return { flagged, manualLabels, totalRows: rows.length, highlights };

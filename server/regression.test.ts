@@ -325,7 +325,7 @@ test('ira 2025 vs 2026 comparison tracks financial deltas while keeping 2025 out
   assert.match(String(row2025?.note || ''), /excluded from SDRA totals/i);
 });
 
-test('month filtering scopes dashboard and comparison outputs to selected month', () => {
+test('date range filtering scopes dashboard and comparison outputs to selected range', () => {
   const pioneerPath = writeWorkbook('pioneer-month-filter.xlsx', [
     { RxNumber: '9301', NDC: '00003089421', FillDate: '2025-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 100, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
     { RxNumber: '9302', NDC: '00003089421', FillDate: '2026-05-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 90, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
@@ -336,8 +336,8 @@ test('month filtering scopes dashboard and comparison outputs to selected month'
   ingestUpload(pricePath, 'price_rx');
   ingestUpload(pioneerPath, 'pioneer');
 
-  const may2025 = getAppState('SEMINOLE', '2025-05');
-  const may2026 = getAppState('SEMINOLE', '2026-05');
+  const may2025 = getAppState('SEMINOLE', { startDate: '2025-05-01', endDate: '2025-05-31' });
+  const may2026 = getAppState('SEMINOLE', { startDate: '2026-05-01', endDate: '2026-05-31' });
 
   assert.equal(may2025.kpi.pioneerClaims, 0);
   assert.equal(may2026.kpi.pioneerClaims, 1);
@@ -346,4 +346,29 @@ test('month filtering scopes dashboard and comparison outputs to selected month'
   assert.equal(may2025.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 1);
   assert.equal(may2025.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
   assert.equal(may2026.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 0);
+});
+
+
+test('ira comparison supports an independent date range from the main reporting range', () => {
+  const pioneerPath = writeWorkbook('pioneer-ira-date-ranges.xlsx', [
+    { RxNumber: '9401', NDC: '00003089421', FillDate: '2025-06-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 120, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+    { RxNumber: '9402', NDC: '00003089421', FillDate: '2026-06-01', Quantity: 10, PrimaryPayer: 'Med D PDP', InventoryGroup: 'RX', Store: '4', TotalPricePaid: 95, 'Claim Status': 'B1', 'Current Transaction Status': 'Completed' },
+  ]);
+  const pricePath = writeWorkbook('price-ira-date-ranges.xlsx', [
+    { NDC: '00003089421', ProperContractPrice: 5, SellDescription: 'IRA Drug', GCN: 'GCN-IRA' },
+  ]);
+
+  ingestUpload(pricePath, 'price_rx');
+  ingestUpload(pioneerPath, 'pioneer');
+
+  const state = getAppState('SEMINOLE', {
+    startDate: '2026-06-01',
+    endDate: '2026-06-30',
+    iraStartDate: '2025-06-01',
+    iraEndDate: '2025-06-30',
+  });
+
+  assert.equal(state.kpi.pioneerClaims, 1);
+  assert.equal(state.iraYearComparison.find((row) => row.year === 2025)?.claimCount, 1);
+  assert.equal(state.iraYearComparison.find((row) => row.year === 2026)?.claimCount, 0);
 });

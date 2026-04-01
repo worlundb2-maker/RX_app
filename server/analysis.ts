@@ -41,19 +41,30 @@ function claimYear(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>) {
   return match ? Number(match[1]) : null;
 }
 
-function yearMonth(value: string | null | undefined) {
-  const match = /^(\d{4}-\d{2})/.exec(String(value || ''));
+function normalizeIsoDate(value: string | null | undefined) {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value || ''));
   return match ? match[1] : null;
 }
 
-function claimInMonth(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>, month?: string) {
-  if (!month) return true;
-  return yearMonth(claim.fillDate) === month || yearMonth(claim.claimDate) === month;
+function dateWithinRange(date: string | null, startDate?: string, endDate?: string) {
+  if (!date) return false;
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+  return true;
 }
 
-function mtfInMonth(claim: Pick<MtfClaim, 'serviceDate' | 'receiptDate'>, month?: string) {
-  if (!month) return true;
-  return yearMonth(claim.serviceDate) === month || yearMonth(claim.receiptDate) === month;
+function claimInDateRange(claim: Pick<PioneerClaim, 'fillDate' | 'claimDate'>, startDate?: string, endDate?: string) {
+  if (!startDate && !endDate) return true;
+  const fillDate = normalizeIsoDate(claim.fillDate);
+  const claimDate = normalizeIsoDate(claim.claimDate);
+  return dateWithinRange(fillDate, startDate, endDate) || dateWithinRange(claimDate, startDate, endDate);
+}
+
+function mtfInDateRange(claim: Pick<MtfClaim, 'serviceDate' | 'receiptDate'>, startDate?: string, endDate?: string) {
+  if (!startDate && !endDate) return true;
+  const serviceDate = normalizeIsoDate(claim.serviceDate);
+  const receiptDate = normalizeIsoDate(claim.receiptDate);
+  return dateWithinRange(serviceDate, startDate, endDate) || dateWithinRange(receiptDate, startDate, endDate);
 }
 
 function cleanNdc(ndc: string | null | undefined) {
@@ -485,17 +496,22 @@ function buildPriceMaps(priceRows: PriceRow[]) {
   return { byGroupExact, byAnyExact, byGroupFamily, weightedFamily };
 }
 
-export function getAppState(pharmacyCode?: PharmacyCode, reportingMonth?: string) {
+export function getAppState(pharmacyCode?: PharmacyCode, filters?: { startDate?: string; endDate?: string; iraStartDate?: string; iraEndDate?: string }) {
   const db = readDb();
+  const startDate = filters?.startDate;
+  const endDate = filters?.endDate;
+  const iraStartDate = filters?.iraStartDate ?? startDate;
+  const iraEndDate = filters?.iraEndDate ?? endDate;
+
   const scopedPioneerClaims = pharmacyCode ? db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.pioneerClaims;
-  const pioneerClaimsAll = scopedPioneerClaims.filter((row) => claimInMonth(row, reportingMonth));
+  const pioneerClaimsAll = scopedPioneerClaims.filter((row) => claimInDateRange(row, startDate, endDate));
   const pioneerClaims = activeClaimsOnly(pioneerClaimsAll);
   const generalAnalyticsClaims = pioneerClaims.filter((row) => claimYear(row) !== 2025);
   const scopedMtfClaims = pharmacyCode ? db.mtfClaims.filter((row) => row.pharmacyCode === pharmacyCode) : db.mtfClaims;
-  const mtfClaims = scopedMtfClaims.filter((row) => mtfInMonth(row, reportingMonth));
+  const mtfClaims = scopedMtfClaims.filter((row) => mtfInDateRange(row, startDate, endDate));
   const inventoryRows = pharmacyCode ? db.inventoryRows.filter((row) => row.pharmacyCode === pharmacyCode) : db.inventoryRows;
   const priceRows = db.priceRows;
-  const uploads = db.uploads.filter((row) => !reportingMonth || yearMonth(row.uploadedAt) === reportingMonth);
+  const uploads = db.uploads.filter((row) => dateWithinRange(normalizeIsoDate(row.uploadedAt), startDate, endDate));
 
   const priceMaps = buildPriceMaps(priceRows);
   const pendingCutoff = recentWindowCutoff(pioneerClaims);
@@ -521,7 +537,7 @@ export function getAppState(pharmacyCode?: PharmacyCode, reportingMonth?: string
     const claims = activeClaimsOnly(db.pioneerClaims.filter((row) => row.pharmacyCode === pharmacy.code && claimInMonth(row, reportingMonth)))
       .filter((row) => claimYear(row) !== 2025);
     const inventory = db.inventoryRows.filter((row) => row.pharmacyCode === pharmacy.code);
-    const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code && mtfInMonth(row, reportingMonth));
+    const mtf = db.mtfClaims.filter((row) => row.pharmacyCode === pharmacy.code && mtfInDateRange(row, startDate, endDate));
     return {
       ...pharmacy,
       claimCount: claims.length,
@@ -1183,7 +1199,8 @@ export function getAppState(pharmacyCode?: PharmacyCode, reportingMonth?: string
     byPharmacy: financeByPharmacy,
   };
 
-  const iraClaims = pioneerClaims.filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
+  const iraClaims = activeClaimsOnly(scopedPioneerClaims.filter((claim) => claimInDateRange(claim, iraStartDate, iraEndDate)))
+    .filter((claim) => claim.payerType === 'Med D' && sdraMap.has(cleanNdc(claim.ndc)));
   const iraComparisonBase = [2025, 2026].map((year) => {
     const yearClaims = iraClaims.filter((claim) => claimYear(claim) === year);
     const claimPairs = yearClaims
