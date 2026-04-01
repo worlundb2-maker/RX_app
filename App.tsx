@@ -123,6 +123,7 @@ export default function App() {
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'viewer' });
   const [setupForm, setSetupForm] = useState({ username: '', password: '', displayName: '' });
+  const [authBusy, setAuthBusy] = useState(false);
   const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
@@ -177,12 +178,22 @@ export default function App() {
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
+    if (authBusy) return;
+    setAuthBusy(true);
     const fd = new FormData(e.target as HTMLFormElement);
-    const res = await fetch('/api/login', { method: 'POST', body: new URLSearchParams(fd as any) });
-    const data = await res.json();
-    if (!res.ok) return setMessage(data.message || 'Login failed');
-    setUser(data.user);
-    setMessage('Logged in');
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        body: new URLSearchParams(fd as any),
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) return setMessage(data.message || 'Login failed');
+      setUser(data.user);
+      setMessage('Logged in');
+    } finally {
+      setAuthBusy(false);
+    }
   }
 
   async function setupAdmin(e: React.FormEvent) {
@@ -291,12 +302,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function logout() {
-    fetch('/api/logout', { method: 'POST' }).catch(() => null);
-    setUser(null);
-    setState(null);
-    setSection('Dashboard');
-    setMessage('Logged out');
+  async function logout() {
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // ignore transient network errors, and still clear local auth state
+    } finally {
+      setUser(null);
+      setState(null);
+      setSection('Dashboard');
+      setMessage('Logged out');
+      setAuthBusy(false);
+    }
   }
 
   function addManualStaffEntry(e: React.FormEvent) {
@@ -452,7 +471,7 @@ export default function App() {
               <form onSubmit={login} className="form-grid" style={{ marginTop: 14 }}>
                 <input name="username" placeholder="Username" autoComplete="username" />
                 <input name="password" type="password" placeholder="Password" autoComplete="current-password" />
-                <button className="primary" type="submit">Log in</button>
+                <button className="primary" type="submit" disabled={authBusy}>{authBusy ? 'Working…' : 'Log in'}</button>
               </form>
             )}
           </div>
@@ -642,7 +661,7 @@ export default function App() {
               </>
             )}
             <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
-            {user && <button className="secondary" type="button" onClick={logout}>Log out</button>}
+            {user && <button className="secondary" type="button" onClick={logout} disabled={authBusy}>{authBusy ? 'Working…' : 'Log out'}</button>}
           </div>
         </header>
 
