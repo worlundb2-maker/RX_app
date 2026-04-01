@@ -179,7 +179,12 @@ export default function App() {
   }, [section, user]);
 
   useEffect(() => {
-    const onScroll = () => setHeaderCompact(window.scrollY > 60);
+    const compactEnterY = 72;
+    const compactExitY = 48;
+    const onScroll = () => {
+      const scrollY = window.scrollY;
+      setHeaderCompact((prev) => (prev ? scrollY > compactExitY : scrollY > compactEnterY));
+    };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
