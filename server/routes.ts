@@ -182,6 +182,11 @@ export function registerRoutes(app: express.Express) {
     next();
   }
 
+  function parseIsoDate(value: unknown) {
+    if (typeof value !== 'string') return undefined;
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+  }
+
   app.get('/api/bootstrap', (_req, res) => {
     const hasUsers = readDb().users.length > 0;
     res.json({
@@ -200,10 +205,11 @@ export function registerRoutes(app: express.Express) {
 
   app.get('/api/state', requireAuth, (req, res) => {
     const pharmacyCode = typeof req.query.pharmacyCode === 'string' && req.query.pharmacyCode !== 'ALL' ? req.query.pharmacyCode as PharmacyCode : undefined;
-    const reportingMonth = typeof req.query.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month)
-      ? req.query.month
-      : undefined;
-    res.json(getAppState(pharmacyCode, reportingMonth));
+    const startDate = parseIsoDate(req.query.startDate);
+    const endDate = parseIsoDate(req.query.endDate);
+    const iraStartDate = parseIsoDate(req.query.iraStartDate);
+    const iraEndDate = parseIsoDate(req.query.iraEndDate);
+    res.json(getAppState(pharmacyCode, { startDate, endDate, iraStartDate, iraEndDate }));
   });
 
   app.post('/api/login', (req, res) => {
