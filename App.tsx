@@ -127,6 +127,7 @@ export default function App() {
   const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
+  const [headerCompact, setHeaderCompact] = useState(false);
   const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
   const visibleSections = user?.role === 'admin'
     ? allSections
@@ -175,6 +176,13 @@ export default function App() {
   useEffect(() => {
     if (section === 'Users' && user?.role !== 'admin') setSection('Dashboard');
   }, [section, user]);
+
+  useEffect(() => {
+    const onScroll = () => setHeaderCompact(window.scrollY > 60);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -633,7 +641,7 @@ export default function App() {
     <div className="app-shell">
       <div className="app-bg" />
       <div className="app">
-        <header className="topbar card glass-card">
+        <header className={`topbar card glass-card ${headerCompact ? 'compact' : ''}`}>
           <div>
             <div className="eyebrow">Foundation-aligned local build</div>
             <h1>Pharmacy Analytics</h1>

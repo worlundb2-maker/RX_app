@@ -77,6 +77,26 @@ select:focus-visible {
   position: sticky;
   top: 10px;
   z-index: 15;
+  transition: padding 0.2s ease, gap 0.2s ease, top 0.2s ease, background-color 0.2s ease;
+}
+
+.topbar.compact {
+  top: 4px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  gap: 12px;
+}
+
+.topbar.compact h1 {
+  font-size: 26px;
+}
+
+.topbar.compact .subtitle {
+  display: none;
+}
+
+.topbar.compact .date-range-control {
+  gap: 4px;
 }
 
 h1, h2, h3 { margin: 0; line-height: 1.15; }
