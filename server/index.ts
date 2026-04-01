@@ -26,6 +26,7 @@ async function mountVite() {
   });
   app.use(vite.middlewares);
   app.use(async (req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
     try {
       const file = await fs.readFile(path.resolve(getAppRootDir(), 'index.html'), 'utf8');
       const html = await vite.transformIndexHtml(req.originalUrl, file);
@@ -39,7 +40,10 @@ async function mountVite() {
 async function mountDist() {
   const dist = path.resolve(getAppRootDir(), 'dist', 'public');
   app.use(express.static(dist));
-  app.use((_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(dist, 'index.html'));
+  });
 }
 
 async function start() {

@@ -115,6 +115,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [selectedPharmacy, setSelectedPharmacy] = useState('ALL');
   const [selectedMonth, setSelectedMonth] = useState('ALL');
+  const [timeView, setTimeView] = useState<'combined' | 'month_by_month'>('combined');
   const [message, setMessage] = useState('');
   const [uploadForm, setUploadForm] = useState<{ type: UploadType; pharmacyCode: string }>({ type: 'pioneer', pharmacyCode: 'SEMINOLE' });
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
@@ -504,17 +505,17 @@ export default function App() {
   ];
 
   const claimsColumns: ColumnDef[] = [
-    { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional' },
-    { key: 'ndc', label: 'NDC', compactPriority: 'secondary' },
-    { key: 'drugName', label: 'Drug', compactPriority: 'primary' },
-    { key: 'inventoryGroup', label: 'Group', compactPriority: 'secondary' },
-    { key: 'totalClaims', label: 'Claims', type: 'number', compactPriority: 'primary' },
-    { key: 'medDClaims', label: 'Med D', type: 'number', compactPriority: 'optional' },
-    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency', compactPriority: 'optional' },
-    { key: 'estimatedAcquisition', label: 'Est Acquisition', type: 'currency', compactPriority: 'optional' },
-    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency', compactPriority: 'primary' },
-    { key: 'opportunity', label: 'Opportunity', compactPriority: 'primary' },
-    { key: 'severity', label: 'Severity', compactPriority: 'primary' },
+    { key: 'pharmacyName', label: 'Pharmacy', compactPriority: 'optional', width: '120px' },
+    { key: 'ndc', label: 'NDC', compactPriority: 'secondary', width: '106px' },
+    { key: 'drugName', label: 'Drug', compactPriority: 'primary', width: '170px' },
+    { key: 'inventoryGroup', label: 'Group', compactPriority: 'secondary', width: '92px' },
+    { key: 'totalClaims', label: 'Claims', type: 'number', compactPriority: 'primary', width: '78px' },
+    { key: 'medDClaims', label: 'Med D', type: 'number', compactPriority: 'optional', width: '78px' },
+    { key: 'avgRecordedRevenuePerRx', label: 'Avg Remit/RX', type: 'currency', compactPriority: 'optional', width: '114px' },
+    { key: 'estimatedAcquisition', label: 'Est Acquisition', type: 'currency', compactPriority: 'optional', width: '128px' },
+    { key: 'avgGrossProfitPerRx', label: 'Gross Profit/RX', type: 'currency', compactPriority: 'primary', width: '116px' },
+    { key: 'opportunity', label: 'Opportunity', compactPriority: 'primary', width: '206px' },
+    { key: 'severity', label: 'Severity', compactPriority: 'primary', width: '124px' },
   ];
 
   const thirdPartyColumns: ColumnDef[] = [
@@ -603,6 +604,17 @@ export default function App() {
 
   const uploadCounts = countBy(state.uploads, (row) => row.type);
   const staffingSummary = state.staffing?.summary || {};
+  const reportingMonths = bootstrap.reportingMonths || [];
+  const selectedMonthIndex = reportingMonths.findIndex((month) => month === selectedMonth);
+
+  function moveMonth(offset: number) {
+    if (!reportingMonths.length || selectedMonth === 'ALL') return;
+    const current = reportingMonths.findIndex((month) => month === selectedMonth);
+    if (current < 0) return;
+    const next = current + offset;
+    if (next < 0 || next >= reportingMonths.length) return;
+    setSelectedMonth(reportingMonths[next]);
+  }
 
   return (
     <div className="app-shell">
@@ -622,10 +634,26 @@ export default function App() {
               </select>
             )}
             {user && (
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
-                <option value="ALL">All months</option>
-                {(bootstrap.reportingMonths || []).map((month) => <option key={month} value={month}>{month}</option>)}
+              <select value={timeView} onChange={(e) => {
+                const nextView = e.target.value as 'combined' | 'month_by_month';
+                setTimeView(nextView);
+                if (nextView === 'combined') setSelectedMonth('ALL');
+              }}>
+                <option value="combined">Combined view</option>
+                <option value="month_by_month">Month-by-month view</option>
               </select>
+            )}
+            {user && (
+              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+                {timeView === 'combined' && <option value="ALL">All months</option>}
+                {reportingMonths.map((month) => <option key={month} value={month}>{month}</option>)}
+              </select>
+            )}
+            {user && timeView === 'month_by_month' && (
+              <>
+                <button className="secondary" type="button" onClick={() => moveMonth(1)} disabled={selectedMonthIndex < 0 || selectedMonthIndex >= reportingMonths.length - 1}>Older</button>
+                <button className="secondary" type="button" onClick={() => moveMonth(-1)} disabled={selectedMonthIndex <= 0}>Newer</button>
+              </>
             )}
             <div className="status-chip">{user ? `${user.displayName} (${user.role})` : 'Not logged in'}</div>
             {user && <button className="secondary" type="button" onClick={logout}>Log out</button>}
@@ -1366,6 +1394,7 @@ function ReportTable({
   const [sortKey, setSortKey] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterText, setFilterText] = useState(externalFilterText || '');
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [flaggedOnly, setFlaggedOnly] = useState(Boolean(externalFlaggedOnly));
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -1394,14 +1423,23 @@ function ReportTable({
 
   const filtered = useMemo(() => {
     const text = filterText.trim().toLowerCase();
+    const activeColumnFilters = Object.entries(columnFilters).filter(([, value]) => value.trim());
     return rows.filter((row) => {
       if (flaggedOnly && !row.flagged) return false;
+      if (activeColumnFilters.length) {
+        const matchesColumns = activeColumnFilters.every(([columnKey, filterValue]) => {
+          const column = columns.find((item) => item.key === columnKey);
+          if (!column) return true;
+          return normalizeForSearch(cellValue(row, column)).includes(filterValue.trim().toLowerCase());
+        });
+        if (!matchesColumns) return false;
+      }
       if (!text) return true;
       return columns.some((column) => normalizeForSearch(cellValue(row, column)).includes(text))
         || normalizeForSearch(row.manualLabel).includes(text)
         || normalizeForSearch(row.flagReason).includes(text);
     });
-  }, [rows, columns, filterText, flaggedOnly]);
+  }, [rows, columns, filterText, flaggedOnly, columnFilters]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -1467,6 +1505,9 @@ function ReportTable({
         </div>
         <div className="report-actions">
           <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter this report" />
+          {Object.values(columnFilters).some((value) => value.trim()) && (
+            <button className="secondary" onClick={() => setColumnFilters({})}>Clear column filters</button>
+          )}
           <label className="checkbox-row"><input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only</label>
           <button className="secondary" onClick={() => exportRows(exportName, columns, sorted)}>Export CSV</button>
         </div>
@@ -1508,6 +1549,21 @@ function ReportTable({
                       }}>
                         {column.label}{sortKey === column.key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
                       </button>
+                    </th>
+                  ))}
+                </tr>
+                <tr className="column-filter-row">
+                  {allowDrilldown && <th />}
+                  {showLabelColumn && <th />}
+                  {columns.map((column) => (
+                    <th key={`${column.key}-filter`} style={{ width: column.width }} data-priority={column.compactPriority || 'primary'}>
+                      <input
+                        className="column-filter-input"
+                        value={columnFilters[column.key] || ''}
+                        onChange={(event) => setColumnFilters((prev) => ({ ...prev, [column.key]: event.target.value }))}
+                        placeholder={`Filter ${column.label}`}
+                        aria-label={`Filter ${column.label}`}
+                      />
                     </th>
                   ))}
                 </tr>
