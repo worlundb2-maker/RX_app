@@ -40,7 +40,7 @@ type AppState = {
   users: any[];
 };
 
-type UploadType = 'pioneer' | 'mtf' | 'mtf_adjustment' | 'inventory' | 'price_rx' | 'price_340b';
+type UploadType = 'pioneer' | 'mtf' | 'mtf_adjustment' | 'inventory' | 'price_rx' | 'price_340b' | 'patient_assistance';
 type UploadQueueItem = { id:string; file: File; type: UploadType; pharmacyCode: string };
 type ManualStaffEntry = {
   id: string;
@@ -93,6 +93,7 @@ const uploadTypeLabels: Record<UploadType, string> = {
   inventory: 'On-hands inventory',
   price_rx: 'RX pricing',
   price_340b: '340B pricing',
+  patient_assistance: 'Patient assistance plans',
 };
 
 const sectionColorMap: Record<Section, string> = {
@@ -127,13 +128,13 @@ export default function App() {
   const [manualStaffEntries, setManualStaffEntries] = useState<ManualStaffEntry[]>([]);
   const [manualStaffForm, setManualStaffForm] = useState({ pharmacyCode: 'SEMINOLE', roleLabel: '', allocated: '1', covered: '0', names: '', notes: '' });
   const [reportContext, setReportContext] = useState<{ section?: Section; filterText?: string; flaggedOnly?: boolean }>({});
-  const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b';
+  const isGlobalPriceUpload = uploadForm.type === 'price_rx' || uploadForm.type === 'price_340b' || uploadForm.type === 'patient_assistance';
   const visibleSections = user?.role === 'admin'
     ? allSections
     : allSections.filter((name) => name !== 'Users');
 
   function isGlobalUpload(type: UploadType) {
-    return type === 'price_rx' || type === 'price_340b';
+    return type === 'price_rx' || type === 'price_340b' || type === 'patient_assistance';
   }
 
   async function loadState(pharmacyCode = selectedPharmacy) {
@@ -595,6 +596,30 @@ export default function App() {
     { key: 'severity', label: 'Severity' },
   ];
 
+  const b340SavingsColumns: ColumnDef[] = [
+    { key: 'pharmacyName', label: 'Pharmacy' },
+    { key: 'claim.rxNumber', label: 'Rx', render: (row) => row.claim.rxNumber },
+    { key: 'claim.drugName', label: 'Drug', render: (row) => row.claim.drugName },
+    { key: 'ndc', label: 'NDC' },
+    { key: 'quantity', label: 'Qty', type: 'number' },
+    { key: 'wacPerUnit', label: 'WAC / Unit', type: 'currency' },
+    { key: 'acquisitionPerUnit', label: '340B Cost / Unit', type: 'currency' },
+    { key: 'savings', label: 'Savings', type: 'currency' },
+    { key: 'severity', label: 'Severity' },
+  ];
+
+  const affordabilityColumns: ColumnDef[] = [
+    { key: 'pharmacyName', label: 'Pharmacy' },
+    { key: 'claim.rxNumber', label: 'Rx', render: (row) => row.claim.rxNumber },
+    { key: 'claim.drugName', label: 'Drug', render: (row) => row.claim.drugName },
+    { key: 'ndc', label: 'NDC' },
+    { key: 'matchedPrograms', label: 'Assistance program(s)' },
+    { key: 'patientPay', label: 'Patient Pay', type: 'currency' },
+    { key: 'affordabilityApplied', label: 'Estimated Assistance', type: 'currency' },
+    { key: 'uncoveredAfterAssistance', label: 'Residual Patient Cost', type: 'currency' },
+    { key: 'severity', label: 'Severity' },
+  ];
+
   const staffingColumns: ColumnDef[] = [
     { key: 'pharmacyName', label: 'Pharmacy' },
     { key: 'roleLabel', label: 'Role' },
@@ -611,7 +636,7 @@ export default function App() {
 
   const uploadColumns: ColumnDef[] = [
     { key: 'type', label: 'Type' },
-    { key: 'pharmacyCode', label: 'Pharmacy', render: (row) => (row.type === 'price_rx' || row.type === 'price_340b') ? 'GLOBAL' : (pharmacyLookup[row.pharmacyCode || '']?.name || row.pharmacyCode || 'ALL') },
+    { key: 'pharmacyCode', label: 'Pharmacy', render: (row) => (row.type === 'price_rx' || row.type === 'price_340b' || row.type === 'patient_assistance') ? 'GLOBAL' : (pharmacyLookup[row.pharmacyCode || '']?.name || row.pharmacyCode || 'ALL') },
     { key: 'rows', label: 'Accepted', type: 'number' },
     { key: 'sourceRows', label: 'Source', type: 'number' },
     { key: 'rejectedRows', label: 'Rejected', type: 'number' },
@@ -771,6 +796,7 @@ export default function App() {
                 { label: 'MTF files', value: (uploadCounts.mtf || 0) + (uploadCounts.mtf_adjustment || 0), type: 'number' },
                 { label: 'Inventory files', value: uploadCounts.inventory || 0, type: 'number' },
                 { label: 'Global price files', value: (uploadCounts.price_rx || 0) + (uploadCounts.price_340b || 0), type: 'number' },
+                { label: 'Patient assistance files', value: uploadCounts.patient_assistance || 0, type: 'number' },
               ]}
               actions={[
                 { label: 'Clear MTF', onClick: () => clearDataset('mtf'), kind: 'secondary' },
@@ -796,6 +822,7 @@ export default function App() {
                       <option value="inventory">On-hands inventory</option>
                       <option value="price_rx">RX pricing</option>
                       <option value="price_340b">340B pricing</option>
+                      <option value="patient_assistance">Patient assistance plans</option>
                     </select>
                     {isGlobalPriceUpload ? (
                       <div className="global-upload">Applies to all stores</div>
@@ -845,7 +872,7 @@ export default function App() {
                   </table>
                 </div>
                 <div className="clear-grid">
-                  {['pioneer','mtf','mtf_adjustment','inventory','price_rx','price_340b','all'].map((d) => (
+                  {['pioneer','mtf','mtf_adjustment','inventory','price_rx','price_340b','patient_assistance','all'].map((d) => (
                     <button key={d} className="secondary" onClick={() => clearDataset(d)}>{d === 'all' ? 'Clear everything' : `Clear ${uploadTypeLabels[d as UploadType] || d}`}</button>
                   ))}
                 </div>
@@ -871,6 +898,7 @@ export default function App() {
                   <li>The inbox scan uses the same file-type and pharmacy validation rules as manual upload.</li>
                   <li>On-hand files drive inventory valuation and stock status.</li>
                   <li>Global RX and 340B price files drive NDC and margin modeling.</li>
+                  <li>Patient assistance plan uploads drive direct-to-patient affordability estimates.</li>
                   <li>Pioneer claims plus MTF payments and adjustments build a running history; inventory and price files overwrite their prior dataset by design, and every dataset remains manually clearable.</li>
                 </ul>
               </div>
@@ -1014,14 +1042,16 @@ export default function App() {
         {section === '340B' && (
           <>
             <SectionOverview
-              title="340B compliance"
-              subtitle="Prioritize Medicaid on 340B, non-eligible prescribers on 340B inventory, and referral-note verification, while preserving the diabetic-supply exception and not auto-flagging Medicaid RX claims tied to 340B prescribers." 
+              title="340B compliance and affordability"
+              subtitle="Track compliance findings, quantify 340B savings as WAC minus 340B acquisition cost on 340B claims, and estimate direct-to-patient affordability using uploaded patient assistance plans."
               color={sectionColorMap['340B']}
               metrics={[
                 { label: 'Findings', value: state.complianceSummary?.findings || 0, type: 'number', tone: 'bad', onClick: () => setReportContext({ section: '340B', flaggedOnly: false }) },
                 { label: 'High severity', value: state.complianceSummary?.high || 0, type: 'number', tone: 'bad', onClick: () => setReportContext({ section: '340B', filterText: 'high', flaggedOnly: true }) },
                 { label: 'Medium severity', value: state.complianceSummary?.medium || 0, type: 'number', tone: 'warn', onClick: () => setReportContext({ section: '340B', filterText: 'medium', flaggedOnly: true }) },
                 { label: 'Referral checks', value: state.complianceSummary?.referralChecks || 0, type: 'number', tone: 'warn', onClick: () => setReportContext({ section: '340B', filterText: 'referral verification queue', flaggedOnly: false }) },
+                { label: '340B savings', value: state.b340SavingsSummary?.totalSavings || 0, type: 'currency', tone: 'good', onClick: () => setReportContext({ section: '340B', filterText: '340b-savings', flaggedOnly: false }) },
+                { label: 'Patient affordability', value: state.affordabilitySummary?.totalAffordability || 0, type: 'currency', tone: 'good', onClick: () => setReportContext({ section: '340B', filterText: 'affordability', flaggedOnly: false }) },
               ]}
               actions={[
                 { label: 'Flagged rows', onClick: () => setReportContext({ section: '340B', flaggedOnly: true }), kind: 'primary' },
@@ -1030,6 +1060,8 @@ export default function App() {
               ]}
             />
             <ReportTable title="340B compliance" description="Compliance findings drill directly to the underlying claim so corrective action can be assigned immediately." rows={state.compliance} columns={complianceColumns} exportName="340b_compliance" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="340B savings (WAC - 340B acquisition)" description="Savings are calculated on 340B claims only as WAC baseline minus 340B acquisition cost, multiplied by dispensed quantity." rows={state.b340Savings || []} columns={b340SavingsColumns} exportName="340b_savings" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
+            <ReportTable title="Direct-to-patient affordability" description="Estimated assistance uses uploaded patient assistance plans matched by NDC and is capped to each claim's patient pay amount." rows={state.affordability || []} columns={affordabilityColumns} exportName="direct_to_patient_affordability" onApplyLabel={saveReviewDecision} renderDetails={(row) => <DetailTable details={row.details} />} externalFilterText={visibleReportContext?.filterText} externalFlaggedOnly={visibleReportContext?.flaggedOnly} />
           </>
         )}
 

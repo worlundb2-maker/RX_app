@@ -1,5 +1,5 @@
 export type PharmacyCode = 'KONAWA' | 'MONTE_VISTA' | 'ARLINGTON' | 'SEMINOLE';
-export type UploadType = 'pioneer' | 'mtf' | 'mtf_adjustment' | 'inventory' | 'price_rx' | 'price_340b';
+export type UploadType = 'pioneer' | 'mtf' | 'mtf_adjustment' | 'inventory' | 'price_rx' | 'price_340b' | 'patient_assistance';
 export type InventoryGroup = 'RX' | '340B';
 export type UserRole = 'admin' | 'analyst' | 'viewer';
 export type ReviewLabel = 'flag' | 'do_not_flag' | 'resolved';
@@ -124,6 +124,16 @@ export interface PriceRow {
   inventoryGroup: InventoryGroup;
 }
 
+export interface PatientAssistanceRow {
+  id: string;
+  ndc: string;
+  programName: string;
+  sponsor: string | null;
+  assistanceAmount: number;
+  assistanceBasis: 'claim' | 'unit';
+  notes: string | null;
+}
+
 export interface UserRecord {
   id: string;
   username: string;
@@ -147,5 +157,6 @@ export interface AppDb {
   mtfClaims: MtfClaim[];
   inventoryRows: InventoryRow[];
   priceRows: PriceRow[];
+  patientAssistanceRows: PatientAssistanceRow[];
   reviewDecisions: ReviewDecision[];
 }
